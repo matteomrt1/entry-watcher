@@ -1,12 +1,104 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from 'react';
+import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database } from 'lucide-react';
+import QRScanner from '@/components/QRScanner';
+import AttendanceLog from '@/components/AttendanceLog';
+import LeaveManager from '@/components/LeaveManager';
+import ReportView from '@/components/ReportView';
+import DataManager from '@/components/DataManager';
+
+type Tab = 'scan' | 'log' | 'leave' | 'report';
+
+const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: 'scan', label: 'Scanner', icon: ScanLine },
+  { id: 'log', label: 'Registro', icon: ClipboardList },
+  { id: 'leave', label: 'Assenze', icon: CalendarOff },
+  { id: 'report', label: 'Report', icon: BarChart3 },
+];
 
 const Index = () => {
+  const [activeTab, setActiveTab] = useState<Tab>('scan');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = () => setRefreshKey(k => k + 1);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-primary p-2">
+              <ScanLine className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold leading-tight">Presenze</h1>
+              <p className="text-xs text-muted-foreground">Monitoraggio Ingressi</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <DataManager onImport={refresh} />
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-3 py-1.5 rounded-full">
+              <Database className="h-3 w-3" />
+              <span>Locale</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Tab bar */}
+      <nav className="border-b bg-card/80 backdrop-blur-sm sticky top-[73px] z-40">
+        <div className="container mx-auto px-4 flex gap-1">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  active
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* Content */}
+      <main className="container mx-auto px-4 py-6 max-w-4xl">
+        {activeTab === 'scan' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-lg font-semibold mb-4">Scansiona QR Code</h2>
+              <QRScanner onScan={refresh} />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold mb-4">Ultimi Ingressi</h2>
+              <AttendanceLog refreshKey={refreshKey} limit={10} />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'log' && (
+          <div>
+            <h2 className="text-lg font-semibold mb-4">Registro Completo</h2>
+            <AttendanceLog refreshKey={refreshKey} limit={100} />
+          </div>
+        )}
+
+        {activeTab === 'leave' && (
+          <LeaveManager refreshKey={refreshKey} onUpdate={refresh} />
+        )}
+
+        {activeTab === 'report' && (
+          <ReportView refreshKey={refreshKey} />
+        )}
+      </main>
     </div>
   );
 };

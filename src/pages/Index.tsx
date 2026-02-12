@@ -18,7 +18,7 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('scan');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = () => setRefreshKey(k => k + 1);

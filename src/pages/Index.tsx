@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database } from 'lucide-react';
+import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard } from 'lucide-react';
 import QRScanner from '@/components/QRScanner';
 import AttendanceLog from '@/components/AttendanceLog';
 import LeaveManager from '@/components/LeaveManager';
 import ReportView from '@/components/ReportView';
+import Dashboard from '@/components/Dashboard';
 import DataManager from '@/components/DataManager';
 
-type Tab = 'scan' | 'log' | 'leave' | 'report';
+type Tab = 'dashboard' | 'scan' | 'log' | 'leave' | 'report';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'scan', label: 'Scanner', icon: ScanLine },
   { id: 'log', label: 'Registro', icon: ClipboardList },
   { id: 'leave', label: 'Assenze', icon: CalendarOff },
@@ -16,7 +18,7 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('scan');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = () => setRefreshKey(k => k + 1);
@@ -71,6 +73,10 @@ const Index = () => {
 
       {/* Content */}
       <main className="container mx-auto px-4 py-6 max-w-4xl">
+        {activeTab === 'dashboard' && (
+          <Dashboard refreshKey={refreshKey} />
+        )}
+
         {activeTab === 'scan' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>

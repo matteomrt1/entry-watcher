@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard } from 'lucide-react';
+import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays } from 'lucide-react';
 import QRScanner from '@/components/QRScanner';
 import AttendanceLog from '@/components/AttendanceLog';
 import LeaveManager from '@/components/LeaveManager';
 import ReportView from '@/components/ReportView';
 import Dashboard from '@/components/Dashboard';
 import DataManager from '@/components/DataManager';
+import CalendarView from '@/components/CalendarView';
 
-type Tab = 'dashboard' | 'scan' | 'log' | 'leave' | 'report';
+type Tab = 'dashboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'scan', label: 'Scanner', icon: ScanLine },
   { id: 'log', label: 'Registro', icon: ClipboardList },
+  { id: 'calendar', label: 'Calendario', icon: CalendarDays },
   { id: 'leave', label: 'Assenze', icon: CalendarOff },
   { id: 'report', label: 'Report', icon: BarChart3 },
 ];
@@ -95,6 +97,10 @@ const Index = () => {
             <h2 className="text-lg font-semibold mb-4">Registro Completo</h2>
             <AttendanceLog refreshKey={refreshKey} limit={100} />
           </div>
+        )}
+
+        {activeTab === 'calendar' && (
+          <CalendarView refreshKey={refreshKey} onUpdate={refresh} />
         )}
 
         {activeTab === 'leave' && (

@@ -1,6 +1,6 @@
 import { exportJSON, importJSON, loadData, formatHours, calculateHours } from '@/lib/attendance';
 import { Button } from '@/components/ui/button';
-import { Download, Upload, FileSpreadsheet } from 'lucide-react';
+import { Download, Upload, FileSpreadsheet, CalendarRange } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRef } from 'react';
 import * as XLSX from 'xlsx';
@@ -9,8 +9,101 @@ interface DataManagerProps {
   onImport?: () => void;
 }
 
+function formatHoursHMM(hours: number): string {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}:${m.toString().padStart(2, '0')}`;
+}
+
+function sumHMM(values: string[]): string {
+  let totalMin = 0;
+  for (const v of values) {
+    if (!v) continue;
+    const [h, m] = v.split(':').map(Number);
+    totalMin += (h || 0) * 60 + (m || 0);
+  }
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${h}:${m.toString().padStart(2, '0')}`;
+}
+
 export default function DataManager({ onImport }: DataManagerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleExportMonthly = () => {
+    const data = loadData();
+    if (data.entries.length === 0) {
+      toast.error('Nessun dato da esportare');
+      return;
+    }
+
+    // Find all months that have data
+    const monthsSet = new Set<string>();
+    data.entries.forEach(e => {
+      const d = new Date(e.timestamp);
+      monthsSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    });
+    const months = Array.from(monthsSet).sort();
+
+    const names = [...new Set(data.entries.map(e => e.employeeName))].sort();
+    const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+
+    const wb = XLSX.utils.book_new();
+
+    for (const ym of months) {
+      const [year, mon] = ym.split('-').map(Number);
+      const daysInMonth = new Date(year, mon, 0).getDate();
+      const sheetName = `${monthNames[mon - 1]} ${year}`;
+
+      // Build rows: one per employee
+      const rows: Record<string, string | number>[] = [];
+      const dayTotals: string[] = new Array(daysInMonth).fill('');
+
+      for (const name of names) {
+        const row: Record<string, string | number> = { Nome: name };
+        const employeeDayValues: string[] = [];
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dayStart = new Date(year, mon - 1, d, 0, 0, 0);
+          const dayEnd = new Date(year, mon - 1, d, 23, 59, 59);
+          const hours = calculateHours(name, dayStart, dayEnd);
+          const val = hours > 0 ? formatHoursHMM(hours) : '';
+          row[String(d)] = val;
+          employeeDayValues.push(val);
+        }
+
+        // Row total
+        row['Totale'] = sumHMM(employeeDayValues);
+        rows.push(row);
+
+        // Accumulate day totals
+        for (let i = 0; i < daysInMonth; i++) {
+          if (employeeDayValues[i]) {
+            dayTotals[i] = sumHMM([dayTotals[i], employeeDayValues[i]]);
+          }
+        }
+      }
+
+      // Total row
+      const totalRow: Record<string, string | number> = { Nome: 'TOTALE' };
+      for (let d = 1; d <= daysInMonth; d++) {
+        totalRow[String(d)] = dayTotals[d - 1] || '';
+      }
+      totalRow['Totale'] = sumHMM(dayTotals);
+      rows.push(totalRow);
+
+      const headers = ['Nome', ...Array.from({ length: daysInMonth }, (_, i) => String(i + 1)), 'Totale'];
+      const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+
+      // Set column widths
+      ws['!cols'] = [{ wch: 20 }, ...headers.slice(1).map(() => ({ wch: 6 }))];
+
+      XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+    }
+
+    XLSX.writeFile(wb, `presenze_mensili_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Export mensile esportato con successo');
+  };
 
   const handleExportExcel = () => {
     const data = loadData();
@@ -85,7 +178,10 @@ export default function DataManager({ onImport }: DataManagerProps) {
   };
 
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-3 flex-wrap">
+      <Button variant="outline" onClick={handleExportMonthly} className="gap-2">
+        <CalendarRange className="h-4 w-4" /> Export Mensile
+      </Button>
       <Button variant="outline" onClick={handleExportExcel} className="gap-2">
         <FileSpreadsheet className="h-4 w-4" /> Esporta Excel
       </Button>

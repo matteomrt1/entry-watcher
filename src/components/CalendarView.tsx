@@ -209,10 +209,15 @@ export default function CalendarView({ refreshKey, onUpdate }: CalendarViewProps
             month={month}
             onMonthChange={setMonth}
             className="p-3 pointer-events-auto"
-            modifiers={{ leave: leaveDates }}
+            modifiers={{ leave: leaveDates, presence: presenceDates }}
             modifiersStyles={{
               leave: {
                 backgroundColor: 'hsl(0, 72%, 51%, 0.15)',
+                borderRadius: '50%',
+                fontWeight: 600,
+              },
+              presence: {
+                backgroundColor: 'hsl(155, 65%, 40%, 0.15)',
                 borderRadius: '50%',
                 fontWeight: 600,
               },

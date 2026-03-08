@@ -223,6 +223,16 @@ export default function CalendarView({ refreshKey, onUpdate }: CalendarViewProps
               },
             }}
           />
+          <div className="flex gap-4 justify-center mt-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(155, 65%, 40%, 0.4)' }} />
+              Presente
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(0, 72%, 51%, 0.4)' }} />
+              Assenza
+            </span>
+          </div>
         </div>
 
         {/* Day detail + Add leave */}

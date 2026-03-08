@@ -78,7 +78,7 @@ const Index = () => {
       {/* Content */}
       <main className="container mx-auto px-4 py-6 max-w-4xl">
         {activeTab === 'dashboard' && (
-          <Dashboard refreshKey={refreshKey} />
+          <Dashboard refreshKey={refreshKey} onUpdate={refresh} />
         )}
 
         {activeTab === 'scan' && (

@@ -1,13 +1,24 @@
-import { useMemo } from 'react';
-import { loadData, getEmployees, calculateHours, formatHours, getLastAction } from '@/lib/attendance';
+import { useMemo, useEffect } from 'react';
+import { loadData, getEmployees, calculateHours, formatHours, getLastAction, runReconciliation } from '@/lib/attendance';
 import { Users, Clock, UserCheck, UserX, TrendingUp, CalendarDays } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import ReviewPanel from '@/components/ReviewPanel';
+import { toast } from 'sonner';
 
 interface DashboardProps {
   refreshKey?: number;
+  onUpdate?: () => void;
 }
 
-export default function Dashboard({ refreshKey }: DashboardProps) {
+export default function Dashboard({ refreshKey, onUpdate }: DashboardProps) {
+  // Run reconciliation on mount
+  useEffect(() => {
+    const count = runReconciliation();
+    if (count > 0) {
+      toast.info(`Riconciliazione: ${count} timbrature generate automaticamente. Verifica le anomalie.`);
+      onUpdate?.();
+    }
+  }, []);
   const employees = useMemo(() => getEmployees(), [refreshKey]);
 
   const today = useMemo(() => {

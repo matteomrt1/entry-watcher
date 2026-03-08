@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { addEntry, getLastAction, getEmployees } from '@/lib/attendance';
+import { addEntry, getEmployees, getTodayStampCount } from '@/lib/attendance';
 import { ScanLine, LogIn, LogOut, Camera, CameraOff, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

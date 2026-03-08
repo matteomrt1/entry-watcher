@@ -4,6 +4,7 @@ import { Download, Upload, FileSpreadsheet, CalendarRange } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRef } from 'react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 interface DataManagerProps {
   onImport?: () => void;

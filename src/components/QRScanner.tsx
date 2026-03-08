@@ -70,8 +70,12 @@ export default function QRScanner({ onScan }: QRScannerProps) {
     }
     if (!employeeName) return;
 
-    const lastAction = getLastAction(employeeName);
-    const type = lastAction?.type === 'check-in' ? 'check-out' : 'check-in';
+    const count = getTodayStampCount(employeeName);
+    if (count >= 4) {
+      toast.error(`${employeeName}: hai già completato le tue 4 timbrature oggi.`);
+      return;
+    }
+    const type: 'check-in' | 'check-out' = count % 2 === 0 ? 'check-in' : 'check-out';
     const now = new Date();
 
     addEntry({ employeeName, timestamp: now.toISOString(), type });

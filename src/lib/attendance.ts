@@ -1,10 +1,21 @@
 // Types and storage utilities for attendance tracking
 
+export interface EmployeeProfile {
+  id: string;
+  name: string;
+  expectedIn1: string;  // HH:MM
+  expectedOut1: string;
+  expectedIn2: string;
+  expectedOut2: string;
+}
+
 export interface AttendanceEntry {
   id: string;
   employeeName: string;
   timestamp: string; // ISO string
   type: 'check-in' | 'check-out';
+  isAutoFilled?: boolean;
+  requiresReview?: boolean;
 }
 
 export interface LeaveEntry {
@@ -12,13 +23,14 @@ export interface LeaveEntry {
   employeeName: string;
   date: string; // YYYY-MM-DD
   type: 'ferie' | 'permesso' | 'malattia' | 'altro';
-  hours?: number; // for partial day (permesso)
+  hours?: number;
   note?: string;
 }
 
 export interface AttendanceData {
   entries: AttendanceEntry[];
   leaves: LeaveEntry[];
+  employees: EmployeeProfile[];
 }
 
 const STORAGE_KEY = 'attendance_data';
@@ -26,14 +38,48 @@ const STORAGE_KEY = 'attendance_data';
 export function loadData(): AttendanceData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { entries: parsed.entries || [], leaves: parsed.leaves || [], employees: parsed.employees || [] };
+    }
   } catch {}
-  return { entries: [], leaves: [] };
+  return { entries: [], leaves: [], employees: [] };
 }
 
 export function saveData(data: AttendanceData) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
+
+// ── Employee CRUD ──
+
+export function addEmployee(profile: Omit<EmployeeProfile, 'id'>): EmployeeProfile {
+  const data = loadData();
+  const newProfile: EmployeeProfile = { ...profile, id: crypto.randomUUID() };
+  data.employees.push(newProfile);
+  saveData(data);
+  return newProfile;
+}
+
+export function updateEmployee(id: string, updates: Partial<Omit<EmployeeProfile, 'id'>>): void {
+  const data = loadData();
+  const idx = data.employees.findIndex(e => e.id === id);
+  if (idx >= 0) {
+    data.employees[idx] = { ...data.employees[idx], ...updates };
+    saveData(data);
+  }
+}
+
+export function deleteEmployee(id: string): void {
+  const data = loadData();
+  data.employees = data.employees.filter(e => e.id !== id);
+  saveData(data);
+}
+
+export function getEmployeesProfiles(): EmployeeProfile[] {
+  return loadData().employees;
+}
+
+// ── Entry CRUD ──
 
 export function addEntry(entry: Omit<AttendanceEntry, 'id'>): AttendanceEntry {
   const data = loadData();
@@ -42,6 +88,17 @@ export function addEntry(entry: Omit<AttendanceEntry, 'id'>): AttendanceEntry {
   saveData(data);
   return newEntry;
 }
+
+export function updateEntry(id: string, updates: Partial<Omit<AttendanceEntry, 'id'>>): void {
+  const data = loadData();
+  const idx = data.entries.findIndex(e => e.id === id);
+  if (idx >= 0) {
+    data.entries[idx] = { ...data.entries[idx], ...updates };
+    saveData(data);
+  }
+}
+
+// ── Leave CRUD ──
 
 export function addLeave(leave: Omit<LeaveEntry, 'id'>): LeaveEntry {
   const data = loadData();
@@ -57,6 +114,8 @@ export function removeLeave(id: string) {
   saveData(data);
 }
 
+// ── Export / Import ──
+
 export function exportJSON(): string {
   return JSON.stringify(loadData(), null, 2);
 }
@@ -65,6 +124,7 @@ export function importJSON(json: string): boolean {
   try {
     const data = JSON.parse(json) as AttendanceData;
     if (data.entries && data.leaves) {
+      if (!data.employees) data.employees = [];
       saveData(data);
       return true;
     }
@@ -72,16 +132,17 @@ export function importJSON(json: string): boolean {
   return false;
 }
 
-// Get unique employee names
+// ── Query helpers ──
+
 export function getEmployees(): string[] {
   const data = loadData();
   const names = new Set<string>();
   data.entries.forEach(e => names.add(e.employeeName));
   data.leaves.forEach(l => names.add(l.employeeName));
+  data.employees.forEach(p => names.add(p.name));
   return Array.from(names).sort();
 }
 
-// Determine last action for an employee (to auto-toggle check-in/out)
 export function getLastAction(employeeName: string): AttendanceEntry | null {
   const data = loadData();
   const entries = data.entries
@@ -90,7 +151,73 @@ export function getLastAction(employeeName: string): AttendanceEntry | null {
   return entries[0] || null;
 }
 
-// Calculate work hours for a given date range
+/** Count today's stamps for a given employee */
+export function getTodayStampCount(employeeName: string): number {
+  const data = loadData();
+  const today = new Date().toISOString().split('T')[0];
+  return data.entries.filter(
+    e => e.employeeName === employeeName && e.timestamp.startsWith(today)
+  ).length;
+}
+
+/** Get entries that need review */
+export function getReviewEntries(): AttendanceEntry[] {
+  const data = loadData();
+  return data.entries.filter(e => e.requiresReview === true);
+}
+
+// ── Reconciliation Engine ──
+
+export function runReconciliation(): number {
+  const data = loadData();
+  const today = new Date().toISOString().split('T')[0];
+  let generated = 0;
+
+  // Group entries by date and employee (exclude today)
+  const grouped: Record<string, Record<string, AttendanceEntry[]>> = {};
+  for (const entry of data.entries) {
+    const date = entry.timestamp.split('T')[0];
+    if (date >= today) continue;
+    if (!grouped[date]) grouped[date] = {};
+    if (!grouped[date][entry.employeeName]) grouped[date][entry.employeeName] = [];
+    grouped[date][entry.employeeName].push(entry);
+  }
+
+  for (const date of Object.keys(grouped)) {
+    for (const empName of Object.keys(grouped[date])) {
+      const dayEntries = grouped[date][empName];
+      const count = dayEntries.length;
+
+      // Already has auto-filled entries for this day? Skip to avoid duplicates
+      if (dayEntries.some(e => e.isAutoFilled)) continue;
+
+      // Only act on odd counts (1 or 3 = missing check-out)
+      if (count === 0 || count === 2 || count === 4) continue;
+      if (count % 2 === 0) continue;
+
+      // Find employee profile for expectedOut2
+      const profile = data.employees.find(p => p.name === empName);
+      const fallbackTime = profile?.expectedOut2 || '18:00';
+
+      const autoEntry: AttendanceEntry = {
+        id: crypto.randomUUID(),
+        employeeName: empName,
+        timestamp: `${date}T${fallbackTime}:00`,
+        type: 'check-out',
+        isAutoFilled: true,
+        requiresReview: true,
+      };
+      data.entries.push(autoEntry);
+      generated++;
+    }
+  }
+
+  if (generated > 0) saveData(data);
+  return generated;
+}
+
+// ── Hours calculation ──
+
 export function calculateHours(
   employeeName: string,
   startDate: Date,
@@ -98,7 +225,7 @@ export function calculateHours(
 ): number {
   const data = loadData();
   const entries = data.entries
-    .filter(e => e.employeeName === employeeName)
+    .filter(e => e.employeeName === employeeName && !e.requiresReview)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   let totalMs = 0;
@@ -119,7 +246,6 @@ export function calculateHours(
   return Math.round((totalMs / (1000 * 60 * 60)) * 100) / 100;
 }
 
-// Get daily breakdown for a date range
 export function getDailyBreakdown(
   employeeName: string,
   startDate: Date,
@@ -139,12 +265,7 @@ export function getDailyBreakdown(
       l => l.employeeName === employeeName && l.date === dateStr
     );
 
-    days.push({
-      date: dateStr,
-      hours,
-      leaveType: leave?.type,
-    });
-
+    days.push({ date: dateStr, hours, leaveType: leave?.type });
     current.setDate(current.getDate() + 1);
   }
 

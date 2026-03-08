@@ -103,7 +103,6 @@ export default function DataManager({ onImport }: DataManagerProps) {
               type: 'list',
               allowBlank: true,
               formulae: [absenceOptions],
-              showDropDown: true,
             };
             // Light yellow background to signal editable
             cell.fill = {

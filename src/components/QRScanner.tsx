@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { addEntry, getLastAction, getEmployees } from '@/lib/attendance';
+import { addEntry, getEmployees, getTodayStampCount } from '@/lib/attendance';
 import { ScanLine, LogIn, LogOut, Camera, CameraOff, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,8 +70,12 @@ export default function QRScanner({ onScan }: QRScannerProps) {
     }
     if (!employeeName) return;
 
-    const lastAction = getLastAction(employeeName);
-    const type = lastAction?.type === 'check-in' ? 'check-out' : 'check-in';
+    const count = getTodayStampCount(employeeName);
+    if (count >= 4) {
+      toast.error(`${employeeName}: hai già completato le tue 4 timbrature oggi.`);
+      return;
+    }
+    const type: 'check-in' | 'check-out' = count % 2 === 0 ? 'check-in' : 'check-out';
     const now = new Date();
 
     addEntry({ employeeName, timestamp: now.toISOString(), type });
@@ -91,6 +95,16 @@ export default function QRScanner({ onScan }: QRScannerProps) {
     if (!manualDate || !manualTime) {
       toast.error('Inserisci data e orario');
       return;
+    }
+
+    // Check stamp limit for today's manual entries
+    const isToday = manualDate === new Date().toISOString().slice(0, 10);
+    if (isToday) {
+      const count = getTodayStampCount(name);
+      if (count >= 4) {
+        toast.error(`${name}: ha già completato le 4 timbrature oggi.`);
+        return;
+      }
     }
 
     const timestamp = new Date(`${manualDate}T${manualTime}:00`).toISOString();

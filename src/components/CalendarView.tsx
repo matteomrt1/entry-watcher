@@ -234,6 +234,14 @@ export default function CalendarView({ refreshKey, onUpdate }: CalendarViewProps
                   {selectedDate.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </h3>
 
+                {/* Ore lavorate */}
+                {selectedDayHours !== null && selectedDayHours > 0 && (
+                  <div className="flex items-center gap-2 mb-3 rounded-lg border border-accent/30 bg-accent/5 p-3">
+                    <Clock className="h-4 w-4 text-accent" />
+                    <span className="text-sm font-medium">Ore lavorate: <span className="font-mono">{formatHours(selectedDayHours)}</span></span>
+                  </div>
+                )}
+
                 {selectedDayLeaves.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nessuna assenza registrata</p>
                 ) : (

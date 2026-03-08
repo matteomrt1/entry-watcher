@@ -71,6 +71,30 @@ export default function CalendarView({ refreshKey, onUpdate }: CalendarViewProps
     return map;
   }, [monthLeaves]);
 
+  // Presence dates (days with actual check-in entries) for current month
+  const presenceDates = useMemo(() => {
+    const y = month.getFullYear();
+    const m = String(month.getMonth() + 1).padStart(2, '0');
+    const prefix = `${y}-${m}`;
+    let entries = data.entries.filter(e => e.timestamp.startsWith(prefix) && e.type === 'check-in');
+    if (selectedEmployee !== '__all__') {
+      entries = entries.filter(e => e.employeeName === selectedEmployee);
+    }
+    const dates = new Set<string>();
+    entries.forEach(e => dates.add(e.timestamp.split('T')[0]));
+    return Array.from(dates).map(d => new Date(d + 'T00:00:00'));
+  }, [data.entries, month, selectedEmployee]);
+
+  // Hours worked per day for selected date
+  const selectedDayHours = useMemo(() => {
+    if (!selectedDate || selectedEmployee === '__all__') return null;
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dayStart = new Date(dateStr + 'T00:00:00');
+    const dayEnd = new Date(dateStr + 'T23:59:59');
+    const hours = calculateHours(selectedEmployee, dayStart, dayEnd);
+    return hours;
+  }, [selectedDate, selectedEmployee, data.entries]);
+
   // Attendance percentage
   const attendanceStats = useMemo(() => {
     const y = month.getFullYear();

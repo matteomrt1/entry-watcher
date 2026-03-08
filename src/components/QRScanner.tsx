@@ -97,6 +97,16 @@ export default function QRScanner({ onScan }: QRScannerProps) {
       return;
     }
 
+    // Check stamp limit for today's manual entries
+    const isToday = manualDate === new Date().toISOString().slice(0, 10);
+    if (isToday) {
+      const count = getTodayStampCount(name);
+      if (count >= 4) {
+        toast.error(`${name}: ha già completato le 4 timbrature oggi.`);
+        return;
+      }
+    }
+
     const timestamp = new Date(`${manualDate}T${manualTime}:00`).toISOString();
     addEntry({ employeeName: name, timestamp, type: manualType });
 

@@ -99,6 +99,9 @@ export default function Dashboard({ refreshKey, onUpdate }: DashboardProps) {
 
   return (
     <div className="space-y-6">
+      {/* Review Panel */}
+      <ReviewPanel refreshKey={refreshKey} onUpdate={onUpdate} />
+
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="stat-card text-center">

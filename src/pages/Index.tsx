@@ -112,6 +112,10 @@ const Index = () => {
         {activeTab === 'report' && (
           <ReportView refreshKey={refreshKey} />
         )}
+
+        {activeTab === 'employees' && (
+          <EmployeeManager refreshKey={refreshKey} onUpdate={refresh} />
+        )}
       </main>
     </div>
   );

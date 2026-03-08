@@ -71,6 +71,30 @@ export default function CalendarView({ refreshKey, onUpdate }: CalendarViewProps
     return map;
   }, [monthLeaves]);
 
+  // Presence dates (days with actual check-in entries) for current month
+  const presenceDates = useMemo(() => {
+    const y = month.getFullYear();
+    const m = String(month.getMonth() + 1).padStart(2, '0');
+    const prefix = `${y}-${m}`;
+    let entries = data.entries.filter(e => e.timestamp.startsWith(prefix) && e.type === 'check-in');
+    if (selectedEmployee !== '__all__') {
+      entries = entries.filter(e => e.employeeName === selectedEmployee);
+    }
+    const dates = new Set<string>();
+    entries.forEach(e => dates.add(e.timestamp.split('T')[0]));
+    return Array.from(dates).map(d => new Date(d + 'T00:00:00'));
+  }, [data.entries, month, selectedEmployee]);
+
+  // Hours worked per day for selected date
+  const selectedDayHours = useMemo(() => {
+    if (!selectedDate || selectedEmployee === '__all__') return null;
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dayStart = new Date(dateStr + 'T00:00:00');
+    const dayEnd = new Date(dateStr + 'T23:59:59');
+    const hours = calculateHours(selectedEmployee, dayStart, dayEnd);
+    return hours;
+  }, [selectedDate, selectedEmployee, data.entries]);
+
   // Attendance percentage
   const attendanceStats = useMemo(() => {
     const y = month.getFullYear();
@@ -185,15 +209,30 @@ export default function CalendarView({ refreshKey, onUpdate }: CalendarViewProps
             month={month}
             onMonthChange={setMonth}
             className="p-3 pointer-events-auto"
-            modifiers={{ leave: leaveDates }}
+            modifiers={{ leave: leaveDates, presence: presenceDates }}
             modifiersStyles={{
               leave: {
                 backgroundColor: 'hsl(0, 72%, 51%, 0.15)',
                 borderRadius: '50%',
                 fontWeight: 600,
               },
+              presence: {
+                backgroundColor: 'hsl(155, 65%, 40%, 0.15)',
+                borderRadius: '50%',
+                fontWeight: 600,
+              },
             }}
           />
+          <div className="flex gap-4 justify-center mt-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(155, 65%, 40%, 0.4)' }} />
+              Presente
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(0, 72%, 51%, 0.4)' }} />
+              Assenza
+            </span>
+          </div>
         </div>
 
         {/* Day detail + Add leave */}
@@ -204,6 +243,14 @@ export default function CalendarView({ refreshKey, onUpdate }: CalendarViewProps
                 <h3 className="font-semibold text-sm mb-3">
                   {selectedDate.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </h3>
+
+                {/* Ore lavorate */}
+                {selectedDayHours !== null && selectedDayHours > 0 && (
+                  <div className="flex items-center gap-2 mb-3 rounded-lg border border-accent/30 bg-accent/5 p-3">
+                    <Clock className="h-4 w-4 text-accent" />
+                    <span className="text-sm font-medium">Ore lavorate: <span className="font-mono">{formatHours(selectedDayHours)}</span></span>
+                  </div>
+                )}
 
                 {selectedDayLeaves.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nessuna assenza registrata</p>

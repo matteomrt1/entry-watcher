@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays } from 'lucide-react';
+import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users } from 'lucide-react';
 import QRScanner from '@/components/QRScanner';
 import AttendanceLog from '@/components/AttendanceLog';
 import LeaveManager from '@/components/LeaveManager';
@@ -7,8 +7,9 @@ import ReportView from '@/components/ReportView';
 import Dashboard from '@/components/Dashboard';
 import DataManager from '@/components/DataManager';
 import CalendarView from '@/components/CalendarView';
+import EmployeeManager from '@/components/EmployeeManager';
 
-type Tab = 'dashboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report';
+type Tab = 'dashboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'employees';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -17,6 +18,7 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'calendar', label: 'Calendario', icon: CalendarDays },
   { id: 'leave', label: 'Assenze', icon: CalendarOff },
   { id: 'report', label: 'Report', icon: BarChart3 },
+  { id: 'employees', label: 'Risorse', icon: Users },
 ];
 
 const Index = () => {

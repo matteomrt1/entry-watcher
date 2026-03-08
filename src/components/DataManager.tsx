@@ -4,6 +4,7 @@ import { Download, Upload, FileSpreadsheet, CalendarRange } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRef } from 'react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 interface DataManagerProps {
   onImport?: () => void;
@@ -30,51 +31,87 @@ function sumHMM(values: string[]): string {
 export default function DataManager({ onImport }: DataManagerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleExportMonthly = () => {
+  const handleExportMonthly = async () => {
     const data = loadData();
     if (data.entries.length === 0) {
       toast.error('Nessun dato da esportare');
       return;
     }
 
-    // Find all months that have data
     const monthsSet = new Set<string>();
     data.entries.forEach(e => {
       const d = new Date(e.timestamp);
       monthsSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     });
     const months = Array.from(monthsSet).sort();
-
     const names = [...new Set(data.entries.map(e => e.employeeName))].sort();
     const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
-    const wb = XLSX.utils.book_new();
+    const absenceOptions = '"124,Permesso,Assenza Ingiustificata,Malattia,Ferie,Altro"';
+
+    const wb = new ExcelJS.Workbook();
 
     for (const ym of months) {
       const [year, mon] = ym.split('-').map(Number);
       const daysInMonth = new Date(year, mon, 0).getDate();
-      const sheetName = `${monthNames[mon - 1]} ${year}`;
+      const sheetName = `${monthNames[mon - 1]} ${year}`.substring(0, 31);
 
-      // Build rows: one per employee
-      const rows: Record<string, string | number>[] = [];
+      const ws = wb.addWorksheet(sheetName);
+
+      // Header row
+      const headers = ['Nome', ...Array.from({ length: daysInMonth }, (_, i) => String(i + 1)), 'Totale'];
+      const headerRow = ws.addRow(headers);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { horizontal: 'center' };
+
+      // Set column widths
+      ws.getColumn(1).width = 22;
+      for (let i = 2; i <= daysInMonth + 1; i++) ws.getColumn(i).width = 8;
+      ws.getColumn(daysInMonth + 2).width = 10;
+
       const dayTotals: string[] = new Array(daysInMonth).fill('');
 
       for (const name of names) {
-        const row: Record<string, string | number> = { Nome: name };
+        const rowValues: (string | number)[] = [name];
         const employeeDayValues: string[] = [];
 
         for (let d = 1; d <= daysInMonth; d++) {
           const dayStart = new Date(year, mon - 1, d, 0, 0, 0);
           const dayEnd = new Date(year, mon - 1, d, 23, 59, 59);
           const hours = calculateHours(name, dayStart, dayEnd);
+
+          // Check if it's a weekend
+          const dayOfWeek = new Date(year, mon - 1, d).getDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
           const val = hours > 0 ? formatHoursHMM(hours) : '';
-          row[String(d)] = val;
+          rowValues.push(val);
           employeeDayValues.push(val);
         }
 
-        // Row total
-        row['Totale'] = sumHMM(employeeDayValues);
-        rows.push(row);
+        rowValues.push(sumHMM(employeeDayValues));
+        const dataRow = ws.addRow(rowValues);
+
+        // Add dropdown validation on empty working-day cells
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dayOfWeek = new Date(year, mon - 1, d).getDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+          if (!employeeDayValues[d - 1] && !isWeekend) {
+            const cell = dataRow.getCell(d + 1); // +1 because col 1 is Nome
+            cell.dataValidation = {
+              type: 'list',
+              allowBlank: true,
+              formulae: [absenceOptions],
+            };
+            // Light yellow background to signal editable
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFF2CC' },
+            };
+          }
+        }
 
         // Accumulate day totals
         for (let i = 0; i < daysInMonth; i++) {
@@ -85,23 +122,23 @@ export default function DataManager({ onImport }: DataManagerProps) {
       }
 
       // Total row
-      const totalRow: Record<string, string | number> = { Nome: 'TOTALE' };
+      const totalValues: (string | number)[] = ['TOTALE'];
       for (let d = 1; d <= daysInMonth; d++) {
-        totalRow[String(d)] = dayTotals[d - 1] || '';
+        totalValues.push(dayTotals[d - 1] || '');
       }
-      totalRow['Totale'] = sumHMM(dayTotals);
-      rows.push(totalRow);
-
-      const headers = ['Nome', ...Array.from({ length: daysInMonth }, (_, i) => String(i + 1)), 'Totale'];
-      const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
-
-      // Set column widths
-      ws['!cols'] = [{ wch: 20 }, ...headers.slice(1).map(() => ({ wch: 6 }))];
-
-      XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+      totalValues.push(sumHMM(dayTotals));
+      const totalRow = ws.addRow(totalValues);
+      totalRow.font = { bold: true };
     }
 
-    XLSX.writeFile(wb, `presenze_mensili_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `presenze_mensili_${new Date().toISOString().split('T')[0]}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
     toast.success('Export mensile esportato con successo');
   };
 

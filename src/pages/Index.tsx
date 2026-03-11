@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor } from 'lucide-react';
+import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor, Wallet } from 'lucide-react';
 import QRScanner from '@/components/QRScanner';
 import AttendanceLog from '@/components/AttendanceLog';
 import LeaveManager from '@/components/LeaveManager';
@@ -9,8 +9,9 @@ import DataManager from '@/components/DataManager';
 import CalendarView from '@/components/CalendarView';
 import EmployeeManager from '@/components/EmployeeManager';
 import LiveBoard from '@/components/LiveBoard';
+import TimeBankPanel from '@/components/TimeBankPanel';
 
-type Tab = 'dashboard' | 'liveboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'employees';
+type Tab = 'dashboard' | 'liveboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'timebank' | 'employees';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -20,6 +21,7 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'calendar', label: 'Calendario', icon: CalendarDays },
   { id: 'leave', label: 'Assenze', icon: CalendarOff },
   { id: 'report', label: 'Report', icon: BarChart3 },
+  { id: 'timebank', label: 'Banca Ore', icon: Wallet },
   { id: 'employees', label: 'Risorse', icon: Users },
 ];
 
@@ -117,6 +119,10 @@ const Index = () => {
 
         {activeTab === 'report' && (
           <ReportView refreshKey={refreshKey} />
+        )}
+
+        {activeTab === 'timebank' && (
+          <TimeBankPanel refreshKey={refreshKey} />
         )}
 
         {activeTab === 'employees' && (

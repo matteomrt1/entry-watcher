@@ -11,7 +11,7 @@ import EmployeeManager from '@/components/EmployeeManager';
 import LiveBoard from '@/components/LiveBoard';
 import TimeBankPanel from '@/components/TimeBankPanel';
 
-type Tab = 'dashboard' | 'liveboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'employees';
+type Tab = 'dashboard' | 'liveboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'timebank' | 'employees';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -21,6 +21,7 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'calendar', label: 'Calendario', icon: CalendarDays },
   { id: 'leave', label: 'Assenze', icon: CalendarOff },
   { id: 'report', label: 'Report', icon: BarChart3 },
+  { id: 'timebank', label: 'Banca Ore', icon: Wallet },
   { id: 'employees', label: 'Risorse', icon: Users },
 ];
 

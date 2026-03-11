@@ -7,6 +7,28 @@ export interface EmployeeProfile {
   expectedOut1: string;
   expectedIn2: string;
   expectedOut2: string;
+  weeklyHours?: number; // default 40
+}
+
+// ── System Settings ──
+
+export interface SystemSettings {
+  roundingMinutes: number;   // 0, 5, 15, 30
+  gracePeriodMinutes: number; // e.g. 10
+}
+
+const SETTINGS_KEY = 'attendance_settings';
+
+export function loadSettings(): SystemSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { roundingMinutes: 15, gracePeriodMinutes: 10 };
+}
+
+export function saveSettings(settings: SystemSettings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export interface AttendanceEntry {

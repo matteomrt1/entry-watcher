@@ -295,7 +295,89 @@ export function getDailyBreakdown(
 }
 
 export function formatHours(h: number): string {
-  const hrs = Math.floor(h);
-  const mins = Math.round((h - hrs) * 60);
-  return `${hrs}h ${mins.toString().padStart(2, '0')}m`;
+  const sign = h < 0 ? '- ' : '';
+  const abs = Math.abs(h);
+  const hrs = Math.floor(abs);
+  const mins = Math.round((abs - hrs) * 60);
+  return `${sign}${hrs}h ${mins.toString().padStart(2, '0')}m`;
+}
+
+// ── Tolerance & Rounding ──
+
+export function applyTolerance(rawMinutes: number, settings: SystemSettings): number {
+  // Grace period: if difference from a full hour block is within grace, snap to the block
+  const { roundingMinutes, gracePeriodMinutes } = settings;
+
+  // First apply grace period: if remainder < grace, floor it
+  if (roundingMinutes > 0) {
+    const remainder = rawMinutes % roundingMinutes;
+    if (remainder > 0 && remainder <= gracePeriodMinutes) {
+      // Abbuono: snap down
+      return rawMinutes - remainder;
+    }
+    // Standard rounding to nearest step
+    return Math.round(rawMinutes / roundingMinutes) * roundingMinutes;
+  }
+
+  // No rounding, just grace on full hours
+  if (gracePeriodMinutes > 0) {
+    const remainder = rawMinutes % 60;
+    if (remainder > 0 && remainder <= gracePeriodMinutes) {
+      return rawMinutes - remainder;
+    }
+  }
+
+  return rawMinutes;
+}
+
+// ── Time Bank Calculation ──
+
+export interface TimeBankResult {
+  expectedHours: number;
+  workedHours: number;
+  balanceHours: number;
+}
+
+export function calculateTimeBank(
+  employeeName: string,
+  startDate: Date,
+  endDate: Date
+): TimeBankResult {
+  const data = loadData();
+  const settings = loadSettings();
+  const profile = data.employees.find(p => p.name === employeeName);
+  const weeklyHours = profile?.weeklyHours ?? 40;
+  const dailyHours = weeklyHours / 5; // Mon-Fri
+
+  // Count working days (exclude weekends)
+  let workingDays = 0;
+  const cursor = new Date(startDate);
+  while (cursor <= endDate) {
+    const dow = cursor.getDay();
+    if (dow !== 0 && dow !== 6) {
+      // Also exclude leave days
+      const dateStr = cursor.toISOString().split('T')[0];
+      const hasLeave = data.leaves.some(
+        l => l.employeeName === employeeName && l.date === dateStr
+      );
+      if (!hasLeave) workingDays++;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const expectedHours = Math.round(workingDays * dailyHours * 100) / 100;
+
+  // Raw worked hours
+  const rawHours = calculateHours(employeeName, startDate, endDate);
+  const rawMinutes = rawHours * 60;
+
+  // Apply tolerance
+  const netMinutes = applyTolerance(rawMinutes, settings);
+  const workedHours = Math.round((netMinutes / 60) * 100) / 100;
+
+  return {
+    expectedHours,
+    workedHours,
+    balanceHours: Math.round((workedHours - expectedHours) * 100) / 100,
+  };
 }

@@ -121,6 +121,10 @@ const Index = () => {
           <ReportView refreshKey={refreshKey} />
         )}
 
+        {activeTab === 'timebank' && (
+          <TimeBankPanel refreshKey={refreshKey} />
+        )}
+
         {activeTab === 'employees' && (
           <EmployeeManager refreshKey={refreshKey} onUpdate={refresh} />
         )}

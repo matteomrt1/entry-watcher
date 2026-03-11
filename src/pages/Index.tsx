@@ -10,10 +10,11 @@ import CalendarView from '@/components/CalendarView';
 import EmployeeManager from '@/components/EmployeeManager';
 import LiveBoard from '@/components/LiveBoard';
 
-type Tab = 'dashboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'employees';
+type Tab = 'dashboard' | 'liveboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'employees';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'liveboard', label: 'Live Board', icon: Monitor },
   { id: 'scan', label: 'Scanner', icon: ScanLine },
   { id: 'log', label: 'Registro', icon: ClipboardList },
   { id: 'calendar', label: 'Calendario', icon: CalendarDays },

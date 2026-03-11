@@ -83,6 +83,10 @@ const Index = () => {
           <Dashboard refreshKey={refreshKey} onUpdate={refresh} />
         )}
 
+        {activeTab === 'liveboard' && (
+          <LiveBoard refreshKey={refreshKey} />
+        )}
+
         {activeTab === 'scan' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>

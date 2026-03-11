@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor } from 'lucide-react';
+import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor, Wallet } from 'lucide-react';
 import QRScanner from '@/components/QRScanner';
 import AttendanceLog from '@/components/AttendanceLog';
 import LeaveManager from '@/components/LeaveManager';
@@ -9,6 +9,7 @@ import DataManager from '@/components/DataManager';
 import CalendarView from '@/components/CalendarView';
 import EmployeeManager from '@/components/EmployeeManager';
 import LiveBoard from '@/components/LiveBoard';
+import TimeBankPanel from '@/components/TimeBankPanel';
 
 type Tab = 'dashboard' | 'liveboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'employees';
 

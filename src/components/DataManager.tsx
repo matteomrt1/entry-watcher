@@ -1,6 +1,6 @@
-import { exportJSON, importJSON, loadData, formatHours, calculateHours } from '@/lib/attendance';
+import { exportJSON, importJSON, loadData, formatHours, calculateHours, getProjects, calculateProjectHours } from '@/lib/attendance';
 import { Button } from '@/components/ui/button';
-import { Download, Upload, FileSpreadsheet, CalendarRange } from 'lucide-react';
+import { Download, Upload, FileSpreadsheet, CalendarRange, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRef } from 'react';
 import * as XLSX from 'xlsx';

@@ -31,6 +31,15 @@ export function saveSettings(settings: SystemSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
+// ── Project Interface ──
+
+export interface Project {
+  id: string;
+  name: string;
+  client?: string;
+  isActive: boolean;
+}
+
 export interface AttendanceEntry {
   id: string;
   employeeName: string;
@@ -38,6 +47,8 @@ export interface AttendanceEntry {
   type: 'check-in' | 'check-out';
   isAutoFilled?: boolean;
   requiresReview?: boolean;
+  projectId?: string;
+  projectName?: string;
 }
 
 export interface LeaveEntry {

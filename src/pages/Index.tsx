@@ -127,6 +127,10 @@ const Index = () => {
           <TimeBankPanel refreshKey={refreshKey} />
         )}
 
+        {activeTab === 'projects' && (
+          <ProjectManager refreshKey={refreshKey} onUpdate={refresh} />
+        )}
+
         {activeTab === 'employees' && (
           <EmployeeManager refreshKey={refreshKey} onUpdate={refresh} />
         )}

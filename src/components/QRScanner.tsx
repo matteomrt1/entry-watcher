@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { addEntry, getEmployees, getTodayStampCount } from '@/lib/attendance';
-import { ScanLine, LogIn, LogOut, Camera, CameraOff, UserPlus } from 'lucide-react';
+import { addEntry, getEmployees, getTodayStampCount, getProjects } from '@/lib/attendance';
+import { ScanLine, LogIn, LogOut, Camera, CameraOff, UserPlus, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +23,8 @@ export default function QRScanner({ onScan }: QRScannerProps) {
   const [manualDate, setManualDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [manualTime, setManualTime] = useState(getDefaultTime);
   const [manualType, setManualType] = useState<'check-in' | 'check-out'>('check-in');
+  const [globalProjectId, setGlobalProjectId] = useState<string>('');
+  const [manualProjectId, setManualProjectId] = useState<string>('');
   const [lastScanned, setLastScanned] = useState<{
     name: string;
     type: 'check-in' | 'check-out';
@@ -30,6 +32,14 @@ export default function QRScanner({ onScan }: QRScannerProps) {
   } | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const activeProjects = getProjects().filter(p => p.isActive);
+
+  const getProjectInfo = (projectId: string) => {
+    if (!projectId) return undefined;
+    const project = activeProjects.find(p => p.id === projectId);
+    return project ? { id: project.id, name: project.name } : undefined;
+  };
 
   const startScanning = async () => {
     if (!containerRef.current) return;
@@ -77,8 +87,14 @@ export default function QRScanner({ onScan }: QRScannerProps) {
     }
     const type: 'check-in' | 'check-out' = count % 2 === 0 ? 'check-in' : 'check-out';
     const now = new Date();
+    const projInfo = getProjectInfo(globalProjectId);
 
-    addEntry({ employeeName, timestamp: now.toISOString(), type });
+    addEntry({
+      employeeName,
+      timestamp: now.toISOString(),
+      type,
+      ...(projInfo ? { projectId: projInfo.id, projectName: projInfo.name } : {}),
+    });
     setLastScanned({ name: employeeName, type, time: now.toLocaleTimeString('it-IT') });
     toast.success(`${type === 'check-in' ? 'Ingresso' : 'Uscita'} registrato per ${employeeName}`);
     onScan?.();
@@ -97,7 +113,6 @@ export default function QRScanner({ onScan }: QRScannerProps) {
       return;
     }
 
-    // Check stamp limit for today's manual entries
     const isToday = manualDate === new Date().toISOString().slice(0, 10);
     if (isToday) {
       const count = getTodayStampCount(name);
@@ -108,7 +123,13 @@ export default function QRScanner({ onScan }: QRScannerProps) {
     }
 
     const timestamp = new Date(`${manualDate}T${manualTime}:00`).toISOString();
-    addEntry({ employeeName: name, timestamp, type: manualType });
+    const projInfo = getProjectInfo(manualProjectId);
+    addEntry({
+      employeeName: name,
+      timestamp,
+      type: manualType,
+      ...(projInfo ? { projectId: projInfo.id, projectName: projInfo.name } : {}),
+    });
 
     setLastScanned({ name, type: manualType, time: manualTime });
     toast.success(`${manualType === 'check-in' ? 'Ingresso' : 'Uscita'} manuale registrato per ${name}`);
@@ -124,8 +145,43 @@ export default function QRScanner({ onScan }: QRScannerProps) {
 
   const existingEmployees = getEmployees();
 
+  const ProjectSelect = ({ value, onChange, id }: { value: string; onChange: (v: string) => void; id: string }) => (
+    <div>
+      <Label htmlFor={id} className="flex items-center gap-1.5">
+        <Briefcase className="h-3.5 w-3.5" /> Progetto (Opzionale)
+      </Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="Nessun Progetto" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Nessun Progetto / Lavoro Generico</SelectItem>
+          {activeProjects.map(p => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.name}{p.client ? ` — ${p.client}` : ''}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   return (
     <div className="flex flex-col items-center gap-6">
+      {/* Global Project Selector for Scanner */}
+      {activeProjects.length > 0 && (
+        <div className="w-full max-w-sm border rounded-xl p-3 bg-card">
+          <ProjectSelect
+            id="global-project"
+            value={globalProjectId || 'none'}
+            onChange={(v) => setGlobalProjectId(v === 'none' ? '' : v)}
+          />
+          <p className="text-xs text-muted-foreground mt-1.5">
+            Le scansioni QR verranno associate a questo progetto.
+          </p>
+        </div>
+      )}
+
       {/* Scanner area */}
       <div className="relative w-full max-w-sm">
         <div
@@ -182,6 +238,14 @@ export default function QRScanner({ onScan }: QRScannerProps) {
               </datalist>
             )}
           </div>
+
+          {activeProjects.length > 0 && (
+            <ProjectSelect
+              id="manual-project"
+              value={manualProjectId || 'none'}
+              onChange={(v) => setManualProjectId(v === 'none' ? '' : v)}
+            />
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

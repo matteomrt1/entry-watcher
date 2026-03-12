@@ -23,6 +23,7 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'leave', label: 'Assenze', icon: CalendarOff },
   { id: 'report', label: 'Report', icon: BarChart3 },
   { id: 'timebank', label: 'Banca Ore', icon: Wallet },
+  { id: 'projects', label: 'Progetti', icon: Briefcase },
   { id: 'employees', label: 'Risorse', icon: Users },
 ];
 

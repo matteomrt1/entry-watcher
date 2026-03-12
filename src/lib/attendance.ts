@@ -74,7 +74,7 @@ export function loadData(): AttendanceData {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { entries: parsed.entries || [], leaves: parsed.leaves || [], employees: parsed.employees || [] };
+      return { entries: parsed.entries || [], leaves: parsed.leaves || [], employees: parsed.employees || [], projects: parsed.projects || [] };
     }
   } catch {}
   return { entries: [], leaves: [], employees: [], projects: [] };

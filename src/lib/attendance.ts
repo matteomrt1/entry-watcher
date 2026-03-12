@@ -394,3 +394,77 @@ export function calculateTimeBank(
     balanceHours: Math.round((workedHours - expectedHours) * 100) / 100,
   };
 }
+
+// ── Project CRUD ──
+
+export function addProject(project: Omit<Project, 'id'>): Project {
+  const data = loadData();
+  const newProject: Project = { ...project, id: crypto.randomUUID() };
+  data.projects.push(newProject);
+  saveData(data);
+  return newProject;
+}
+
+export function getProjects(): Project[] {
+  return loadData().projects;
+}
+
+export function toggleProjectStatus(id: string): void {
+  const data = loadData();
+  const idx = data.projects.findIndex(p => p.id === id);
+  if (idx >= 0) {
+    data.projects[idx].isActive = !data.projects[idx].isActive;
+    saveData(data);
+  }
+}
+
+// ── Project Hours Calculation ──
+
+export function calculateProjectHours(
+  projectId: string | null,
+  startDate: Date,
+  endDate: Date
+): { employeeName: string; hours: number }[] {
+  const data = loadData();
+  const entries = data.entries
+    .filter(e => {
+      const ts = new Date(e.timestamp);
+      return ts >= startDate && ts <= endDate;
+    })
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  // Group by employee
+  const byEmployee: Record<string, AttendanceEntry[]> = {};
+  for (const e of entries) {
+    if (!byEmployee[e.employeeName]) byEmployee[e.employeeName] = [];
+    byEmployee[e.employeeName].push(e);
+  }
+
+  const results: { employeeName: string; hours: number }[] = [];
+
+  for (const [empName, empEntries] of Object.entries(byEmployee)) {
+    let totalMs = 0;
+    let lastCheckIn: { ts: Date; pId?: string } | null = null;
+
+    for (const entry of empEntries) {
+      const ts = new Date(entry.timestamp);
+      if (entry.type === 'check-in') {
+        lastCheckIn = { ts, pId: entry.projectId };
+      } else if (entry.type === 'check-out' && lastCheckIn) {
+        // Hours belong to the check-in's project
+        const checkInProjectId = lastCheckIn.pId || null;
+        if (checkInProjectId === projectId) {
+          totalMs += ts.getTime() - lastCheckIn.ts.getTime();
+        }
+        lastCheckIn = null;
+      }
+    }
+
+    const hours = Math.round((totalMs / (1000 * 60 * 60)) * 100) / 100;
+    if (hours > 0) {
+      results.push({ employeeName: empName, hours });
+    }
+  }
+
+  return results;
+}

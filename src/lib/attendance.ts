@@ -77,7 +77,7 @@ export function loadData(): AttendanceData {
       return { entries: parsed.entries || [], leaves: parsed.leaves || [], employees: parsed.employees || [] };
     }
   } catch {}
-  return { entries: [], leaves: [], employees: [] };
+  return { entries: [], leaves: [], employees: [], projects: [] };
 }
 
 export function saveData(data: AttendanceData) {

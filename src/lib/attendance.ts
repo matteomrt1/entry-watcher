@@ -64,6 +64,7 @@ export interface AttendanceData {
   entries: AttendanceEntry[];
   leaves: LeaveEntry[];
   employees: EmployeeProfile[];
+  projects: Project[];
 }
 
 const STORAGE_KEY = 'attendance_data';

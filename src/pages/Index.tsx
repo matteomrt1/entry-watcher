@@ -10,6 +10,7 @@ import CalendarView from '@/components/CalendarView';
 import EmployeeManager from '@/components/EmployeeManager';
 import LiveBoard from '@/components/LiveBoard';
 import TimeBankPanel from '@/components/TimeBankPanel';
+import ProjectManager from '@/components/ProjectManager';
 
 type Tab = 'dashboard' | 'liveboard' | 'scan' | 'log' | 'calendar' | 'leave' | 'report' | 'timebank' | 'employees';
 

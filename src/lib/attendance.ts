@@ -159,6 +159,7 @@ export function importJSON(json: string): boolean {
     const data = JSON.parse(json) as AttendanceData;
     if (data.entries && data.leaves) {
       if (!data.employees) data.employees = [];
+      if (!data.projects) data.projects = [];
       saveData(data);
       return true;
     }

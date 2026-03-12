@@ -214,10 +214,62 @@ export default function DataManager({ onImport }: DataManagerProps) {
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  const handleExportJobCosting = async () => {
+    const data = loadData();
+    if (data.entries.length === 0) {
+      toast.error('Nessun dato da esportare');
+      return;
+    }
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const projects = getProjects();
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Job Costing');
+
+    const headers = ['Progetto', 'Cliente', 'Risorsa', 'Ore Totali'];
+    const headerRow = ws.addRow(headers);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { horizontal: 'center' };
+    ws.getColumn(1).width = 28;
+    ws.getColumn(2).width = 22;
+    ws.getColumn(3).width = 22;
+    ws.getColumn(4).width = 14;
+
+    // For each project
+    for (const project of projects) {
+      const projectHours = calculateProjectHours(project.id, monthStart, monthEnd);
+      for (const ph of projectHours) {
+        ws.addRow([project.name, project.client || '', ph.employeeName, formatHoursHMM(ph.hours)]);
+      }
+    }
+
+    // Overhead (no project)
+    const overheadHours = calculateProjectHours(null, monthStart, monthEnd);
+    for (const oh of overheadHours) {
+      ws.addRow(['Overhead / Lavoro Generico', '', oh.employeeName, formatHoursHMM(oh.hours)]);
+    }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `job_costing_${now.toISOString().split('T')[0]}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Report Job Costing esportato');
+  };
+
   return (
     <div className="flex gap-3 flex-wrap">
       <Button variant="outline" onClick={handleExportMonthly} className="gap-2">
         <CalendarRange className="h-4 w-4" /> Export Mensile
+      </Button>
+      <Button variant="outline" onClick={handleExportJobCosting} className="gap-2">
+        <Briefcase className="h-4 w-4" /> Job Costing
       </Button>
       <Button variant="outline" onClick={handleExportExcel} className="gap-2">
         <FileSpreadsheet className="h-4 w-4" /> Esporta Excel

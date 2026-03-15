@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Trash2, CalendarPlus, Palmtree, Clock, Stethoscope, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -25,6 +26,7 @@ export default function LeaveManager({ refreshKey, onUpdate }: LeaveManagerProps
   const [type, setType] = useState<LeaveEntry['type']>('ferie');
   const [hours, setHours] = useState('8');
   const [note, setNote] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const employees = useMemo(() => getEmployees(), [refreshKey]);
   const leaves = useMemo(() => {
@@ -52,9 +54,11 @@ export default function LeaveManager({ refreshKey, onUpdate }: LeaveManagerProps
     onUpdate?.();
   };
 
-  const handleDelete = (id: string) => {
-    removeLeave(id);
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    removeLeave(deleteTarget.id);
     toast.success('Voce rimossa');
+    setDeleteTarget(null);
     onUpdate?.();
   };
 
@@ -143,7 +147,7 @@ export default function LeaveManager({ refreshKey, onUpdate }: LeaveManagerProps
                 <p className="font-mono text-sm text-muted-foreground">
                   {new Date(leave.date + 'T00:00:00').toLocaleDateString('it-IT')}
                 </p>
-                <Button variant="ghost" size="icon" onClick={() => handleDelete(leave.id)} className="text-destructive hover:text-destructive">
+                <Button variant="ghost" size="icon" onClick={() => setDeleteTarget({ id: leave.id, name: leave.employeeName })} className="text-destructive hover:text-destructive">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -151,6 +155,23 @@ export default function LeaveManager({ refreshKey, onUpdate }: LeaveManagerProps
           })
         )}
       </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Conferma eliminazione</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sei sicuro di voler rimuovere l'assenza di <strong>{deleteTarget?.name}</strong>? Questa azione non può essere annullata.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Elimina
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

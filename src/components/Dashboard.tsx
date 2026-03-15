@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from 'react';
-import { loadData, getEmployees, calculateHours, formatHours, getLastAction, runReconciliation } from '@/lib/attendance';
+import { loadData, getEmployees, getEmployeesProfiles, calculateHours, formatHours, getLastAction, runReconciliation } from '@/lib/attendance';
 import { Users, Clock, UserCheck, UserX, TrendingUp, CalendarDays } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import ReviewPanel from '@/components/ReviewPanel';
@@ -19,6 +19,40 @@ export default function Dashboard({ refreshKey, onUpdate }: DashboardProps) {
       onUpdate?.();
     }
   }, []);
+
+  // Alert: dipendenti senza timbratura entro le 09:30
+  useEffect(() => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const deadlineMinutes = 9 * 60 + 30; // 09:30
+
+    if (currentMinutes < deadlineMinutes) return;
+
+    const today = now.toISOString().split('T')[0];
+    const data = loadData();
+    const profiles = getEmployeesProfiles();
+
+    const missing = profiles.filter(p => {
+      // Ha timbrature oggi?
+      const hasEntry = data.entries.some(
+        e => e.employeeName === p.name && e.timestamp.startsWith(today)
+      );
+      if (hasEntry) return false;
+      // Ha un congedo oggi?
+      const hasLeave = data.leaves.some(
+        l => l.employeeName === p.name && l.date === today
+      );
+      return !hasLeave;
+    });
+
+    if (missing.length > 0) {
+      const names = missing.map(m => m.name).join(', ');
+      toast.warning(
+        `⚠️ Timbratura mancante alle 09:30: ${names}`,
+        { duration: 10000 }
+      );
+    }
+  }, [refreshKey]);
   const employees = useMemo(() => getEmployees(), [refreshKey]);
 
   const today = useMemo(() => {

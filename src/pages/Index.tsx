@@ -121,7 +121,7 @@ const Index = () => {
         {activeTab === 'log' && (
           <div>
             <h2 className="text-lg font-semibold mb-4">Registro Completo</h2>
-            <AttendanceLog refreshKey={refreshKey} limit={100} />
+            <AttendanceLog refreshKey={refreshKey} limit={200} showFilters />
           </div>
         )}
 

@@ -32,8 +32,20 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [refreshKey, setRefreshKey] = useState(0);
+  const reconDone = useRef(false);
 
   const refresh = () => setRefreshKey(k => k + 1);
+
+  // Auto-reconciliation on first load
+  useEffect(() => {
+    if (reconDone.current) return;
+    reconDone.current = true;
+    const count = runReconciliation();
+    if (count > 0) {
+      toast.info(`Riconciliazione automatica: ${count} uscita/e mancante/i generate`);
+      refresh();
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">

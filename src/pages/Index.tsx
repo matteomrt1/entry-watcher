@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor, Wallet, Briefcase } from 'lucide-react';
+import { runReconciliation } from '@/lib/attendance';
+import { toast } from 'sonner';
 import QRScanner from '@/components/QRScanner';
 import AttendanceLog from '@/components/AttendanceLog';
 import LeaveManager from '@/components/LeaveManager';
@@ -30,8 +32,20 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [refreshKey, setRefreshKey] = useState(0);
+  const reconDone = useRef(false);
 
   const refresh = () => setRefreshKey(k => k + 1);
+
+  // Auto-reconciliation on first load
+  useEffect(() => {
+    if (reconDone.current) return;
+    reconDone.current = true;
+    const count = runReconciliation();
+    if (count > 0) {
+      toast.info(`Riconciliazione automatica: ${count} uscita/e mancante/i generate`);
+      refresh();
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,7 +121,7 @@ const Index = () => {
         {activeTab === 'log' && (
           <div>
             <h2 className="text-lg font-semibold mb-4">Registro Completo</h2>
-            <AttendanceLog refreshKey={refreshKey} limit={100} />
+            <AttendanceLog refreshKey={refreshKey} limit={200} showFilters />
           </div>
         )}
 

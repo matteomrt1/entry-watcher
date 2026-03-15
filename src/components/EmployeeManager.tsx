@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { UserPlus, Pencil, Trash2, Clock, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,6 +34,7 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<EmployeeFormData>(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const openNew = () => {
     setEditingId(null);
@@ -59,10 +61,11 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
     onUpdate?.();
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (!confirm(`Eliminare il profilo di ${name}?`)) return;
-    deleteEmployee(id);
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteEmployee(deleteTarget.id);
     toast.success('Profilo eliminato');
+    setDeleteTarget(null);
     onUpdate?.();
   };
 
@@ -131,7 +134,7 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                 <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => handleDelete(p.id, p.name)} className="text-destructive hover:text-destructive">
+                <Button variant="ghost" size="icon" onClick={() => setDeleteTarget({ id: p.id, name: p.name })} className="text-destructive hover:text-destructive">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -139,6 +142,23 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Conferma eliminazione</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sei sicuro di voler eliminare il profilo di <strong>{deleteTarget?.name}</strong>? Questa azione non può essere annullata.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Elimina
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

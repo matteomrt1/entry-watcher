@@ -208,6 +208,9 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                     {p.expectedIn1}–{p.expectedOut1}
                     {p.expectedIn2 && ` | ${p.expectedIn2}–${p.expectedOut2}`}
                   </span>
+                  {(p.defaultBreakMinutes ?? 0) > 0 && (
+                    <span className="text-xs text-muted-foreground">· Pausa {p.defaultBreakMinutes}min</span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">

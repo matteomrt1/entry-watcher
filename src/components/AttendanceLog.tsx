@@ -1,22 +1,26 @@
-import { loadData, getEmployees, type AttendanceEntry } from '@/lib/attendance';
-import { LogIn, LogOut, Filter, X } from 'lucide-react';
+import { loadData, getEmployees, deleteEntry, type AttendanceEntry } from '@/lib/attendance';
+import { LogIn, LogOut, Filter, X, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
 
 interface AttendanceLogProps {
   refreshKey?: number;
   limit?: number;
   showFilters?: boolean;
+  onUpdate?: () => void;
 }
 
-export default function AttendanceLog({ refreshKey, limit = 20, showFilters = false }: AttendanceLogProps) {
+export default function AttendanceLog({ refreshKey, limit = 20, showFilters = false, onUpdate }: AttendanceLogProps) {
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterType, setFilterType] = useState<'all' | 'check-in' | 'check-out'>('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [showFilterBar, setShowFilterBar] = useState(showFilters);
+  const [deleteTarget, setDeleteTarget] = useState<AttendanceEntry | null>(null);
 
   const employees = useMemo(() => getEmployees(), [refreshKey]);
 
@@ -49,6 +53,14 @@ export default function AttendanceLog({ refreshKey, limit = 20, showFilters = fa
     setFilterType('all');
     setFilterDateFrom('');
     setFilterDateTo('');
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteEntry(deleteTarget.id);
+    toast.success(`Timbratura di ${deleteTarget.employeeName} eliminata`);
+    setDeleteTarget(null);
+    onUpdate?.();
   };
 
   if (entries.length === 0 && !hasActiveFilters) {
@@ -131,15 +143,32 @@ export default function AttendanceLog({ refreshKey, limit = 20, showFilters = fa
       ) : (
         <div className="space-y-2">
           {entries.map((entry) => (
-            <EntryRow key={entry.id} entry={entry} />
+            <EntryRow key={entry.id} entry={entry} onDelete={setDeleteTarget} />
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Conferma eliminazione</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sei sicuro di voler eliminare la timbratura di <strong>{deleteTarget?.employeeName}</strong> ({deleteTarget?.type === 'check-in' ? 'Ingresso' : 'Uscita'} del {deleteTarget ? new Date(deleteTarget.timestamp).toLocaleString('it-IT') : ''})?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Elimina
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-function EntryRow({ entry }: { entry: AttendanceEntry }) {
+function EntryRow({ entry, onDelete }: { entry: AttendanceEntry; onDelete: (e: AttendanceEntry) => void }) {
   const date = new Date(entry.timestamp);
   const isIn = entry.type === 'check-in';
 
@@ -160,6 +189,9 @@ function EntryRow({ entry }: { entry: AttendanceEntry }) {
         <p className="font-mono text-sm">{date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</p>
         <p className="text-xs text-muted-foreground">{date.toLocaleDateString('it-IT')}</p>
       </div>
+      <Button variant="ghost" size="icon" onClick={() => onDelete(entry)} className="text-destructive hover:text-destructive h-8 w-8">
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }

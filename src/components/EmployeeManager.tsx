@@ -64,6 +64,7 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
       expectedOut1: p.expectedOut1,
       expectedIn2: p.expectedIn2,
       expectedOut2: p.expectedOut2,
+      defaultBreakMinutes: p.defaultBreakMinutes ?? 0,
     });
     setOpen(true);
   };

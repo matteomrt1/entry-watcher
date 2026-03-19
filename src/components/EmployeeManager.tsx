@@ -21,6 +21,7 @@ interface EmployeeFormData {
   expectedOut1: string;
   expectedIn2: string;
   expectedOut2: string;
+  defaultBreakMinutes: number;
 }
 
 const emptyForm: EmployeeFormData = {
@@ -30,6 +31,7 @@ const emptyForm: EmployeeFormData = {
   expectedOut1: '12:00',
   expectedIn2: '13:00',
   expectedOut2: '17:00',
+  defaultBreakMinutes: 0,
 };
 
 const shiftLabels: Record<ShiftType, string> = {

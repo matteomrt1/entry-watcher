@@ -113,7 +113,7 @@ const Index = () => {
             </div>
             <div>
               <h2 className="text-lg font-semibold mb-4">Ultimi Ingressi</h2>
-              <AttendanceLog refreshKey={refreshKey} limit={10} />
+              <AttendanceLog refreshKey={refreshKey} limit={10} onUpdate={triggerRefresh} />
             </div>
           </div>
         )}

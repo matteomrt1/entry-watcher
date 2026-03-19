@@ -18,6 +18,7 @@ export interface EmployeeProfile {
   expectedIn2: string;
   expectedOut2: string;
   weeklyHours?: number; // default 40
+  defaultBreakMinutes?: number; // pausa pranzo default (es. 30), detratta se solo 2 timbrature
 }
 
 // ── System Settings ──

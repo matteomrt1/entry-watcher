@@ -240,9 +240,8 @@ export function runReconciliation(): number {
       if (count === 0 || count === 2 || count === 4) continue;
       if (count % 2 === 0) continue;
 
-      // Find employee profile for expectedOut2
-      const profile = data.employees.find(p => p.name === empName);
-      const fallbackTime = profile?.expectedOut2 || '18:00';
+      // Use last expected out time based on shift
+      const fallbackTime = profile?.expectedOut2 || profile?.expectedOut1 || '18:00';
 
       const autoEntry: AttendanceEntry = {
         id: crypto.randomUUID(),

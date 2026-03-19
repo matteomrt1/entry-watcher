@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { getEmployeesProfiles, addEmployee, updateEmployee, deleteEmployee, type EmployeeProfile } from '@/lib/attendance';
+import { getEmployeesProfiles, addEmployee, updateEmployee, deleteEmployee, SHIFT_PRESETS, type EmployeeProfile, type ShiftType } from '@/lib/attendance';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UserPlus, Pencil, Trash2, Clock, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -15,6 +16,7 @@ interface EmployeeManagerProps {
 
 interface EmployeeFormData {
   name: string;
+  shift: ShiftType;
   expectedIn1: string;
   expectedOut1: string;
   expectedIn2: string;
@@ -23,10 +25,19 @@ interface EmployeeFormData {
 
 const emptyForm: EmployeeFormData = {
   name: '',
+  shift: 'spezzato',
   expectedIn1: '08:00',
   expectedOut1: '12:00',
   expectedIn2: '13:00',
   expectedOut2: '17:00',
+};
+
+const shiftLabels: Record<ShiftType, string> = {
+  mattina: '☀️ Mattina',
+  pomeriggio: '🌤️ Pomeriggio',
+  notte: '🌙 Notte',
+  spezzato: '📋 Spezzato',
+  personalizzato: '⚙️ Personalizzato',
 };
 
 export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManagerProps) {
@@ -44,8 +55,31 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
 
   const openEdit = (p: EmployeeProfile) => {
     setEditingId(p.id);
-    setForm({ name: p.name, expectedIn1: p.expectedIn1, expectedOut1: p.expectedOut1, expectedIn2: p.expectedIn2, expectedOut2: p.expectedOut2 });
+    setForm({
+      name: p.name,
+      shift: p.shift || 'personalizzato',
+      expectedIn1: p.expectedIn1,
+      expectedOut1: p.expectedOut1,
+      expectedIn2: p.expectedIn2,
+      expectedOut2: p.expectedOut2,
+    });
     setOpen(true);
+  };
+
+  const handleShiftChange = (shift: ShiftType) => {
+    if (shift === 'personalizzato') {
+      setForm(f => ({ ...f, shift }));
+    } else {
+      const preset = SHIFT_PRESETS[shift];
+      setForm(f => ({
+        ...f,
+        shift,
+        expectedIn1: preset.expectedIn1,
+        expectedOut1: preset.expectedOut1,
+        expectedIn2: preset.expectedIn2,
+        expectedOut2: preset.expectedOut2,
+      }));
+    }
   };
 
   const handleSave = () => {
@@ -69,7 +103,11 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
     onUpdate?.();
   };
 
-  const setField = (key: keyof EmployeeFormData, value: string) => setForm(f => ({ ...f, [key]: value }));
+  const setField = (key: keyof EmployeeFormData, value: string) => {
+    setForm(f => ({ ...f, [key]: value, shift: 'personalizzato' as ShiftType }));
+  };
+
+  const isDoubleShift = form.shift === 'spezzato' || form.shift === 'personalizzato';
 
   return (
     <div className="space-y-6">
@@ -88,8 +126,23 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
             <div className="space-y-4 pt-2">
               <div>
                 <Label>Nome</Label>
-                <Input value={form.name} onChange={e => setField('name', e.target.value)} placeholder="Mario Rossi" />
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Mario Rossi" />
               </div>
+
+              <div>
+                <Label>Turno</Label>
+                <Select value={form.shift} onValueChange={(v) => handleShiftChange(v as ShiftType)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(shiftLabels) as ShiftType[]).map(s => (
+                      <SelectItem key={s} value={s}>{shiftLabels[s]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Ingresso 1</Label>
@@ -99,15 +152,20 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                   <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Uscita 1</Label>
                   <Input type="time" value={form.expectedOut1} onChange={e => setField('expectedOut1', e.target.value)} />
                 </div>
-                <div>
-                  <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Ingresso 2</Label>
-                  <Input type="time" value={form.expectedIn2} onChange={e => setField('expectedIn2', e.target.value)} />
-                </div>
-                <div>
-                  <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Uscita 2</Label>
-                  <Input type="time" value={form.expectedOut2} onChange={e => setField('expectedOut2', e.target.value)} />
-                </div>
+                {isDoubleShift && (
+                  <>
+                    <div>
+                      <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Ingresso 2</Label>
+                      <Input type="time" value={form.expectedIn2} onChange={e => setField('expectedIn2', e.target.value)} />
+                    </div>
+                    <div>
+                      <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Uscita 2</Label>
+                      <Input type="time" value={form.expectedOut2} onChange={e => setField('expectedOut2', e.target.value)} />
+                    </div>
+                  </>
+                )}
               </div>
+
               <Button onClick={handleSave} className="w-full">{editingId ? 'Salva Modifiche' : 'Aggiungi'}</Button>
             </div>
           </DialogContent>
@@ -126,9 +184,13 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
             <div key={p.id} className="stat-card flex items-center justify-between">
               <div>
                 <p className="font-semibold">{p.name}</p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  {p.expectedIn1}–{p.expectedOut1} | {p.expectedIn2}–{p.expectedOut2}
-                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-primary">{shiftLabels[p.shift || 'personalizzato']}</span>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {p.expectedIn1}–{p.expectedOut1}
+                    {p.expectedIn2 && ` | ${p.expectedIn2}–${p.expectedOut2}`}
+                  </span>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>

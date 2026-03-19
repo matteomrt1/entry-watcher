@@ -1,8 +1,18 @@
 // Types and storage utilities for attendance tracking
 
+export type ShiftType = 'mattina' | 'pomeriggio' | 'notte' | 'spezzato' | 'personalizzato';
+
+export const SHIFT_PRESETS: Record<Exclude<ShiftType, 'personalizzato'>, { label: string; expectedIn1: string; expectedOut1: string; expectedIn2: string; expectedOut2: string }> = {
+  mattina:    { label: 'Mattina (06:00–14:00)',       expectedIn1: '06:00', expectedOut1: '14:00', expectedIn2: '', expectedOut2: '' },
+  pomeriggio: { label: 'Pomeriggio (14:00–22:00)',    expectedIn1: '14:00', expectedOut1: '22:00', expectedIn2: '', expectedOut2: '' },
+  notte:      { label: 'Notte (22:00–06:00)',         expectedIn1: '22:00', expectedOut1: '06:00', expectedIn2: '', expectedOut2: '' },
+  spezzato:   { label: 'Spezzato (08:00–12:00 / 13:00–17:00)', expectedIn1: '08:00', expectedOut1: '12:00', expectedIn2: '13:00', expectedOut2: '17:00' },
+};
+
 export interface EmployeeProfile {
   id: string;
   name: string;
+  shift: ShiftType;
   expectedIn1: string;  // HH:MM
   expectedOut1: string;
   expectedIn2: string;

@@ -240,7 +240,8 @@ export function runReconciliation(): number {
       if (count === 0 || count === 2 || count === 4) continue;
       if (count % 2 === 0) continue;
 
-      // Use last expected out time based on shift
+      // Find employee profile and use last expected out time based on shift
+      const profile = data.employees.find(p => p.name === empName);
       const fallbackTime = profile?.expectedOut2 || profile?.expectedOut1 || '18:00';
 
       const autoEntry: AttendanceEntry = {

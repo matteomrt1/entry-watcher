@@ -276,23 +276,46 @@ export function calculateHours(
   endDate: Date
 ): number {
   const data = loadData();
+  const profile = data.employees.find(p => p.name === employeeName);
+  const breakMinutes = profile?.defaultBreakMinutes ?? 0;
+
   const entries = data.entries
     .filter(e => e.employeeName === employeeName && !e.requiresReview)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  let totalMs = 0;
-  let lastCheckIn: Date | null = null;
-
+  // Group by date to detect 2-stamp days for break deduction
+  const byDate: Record<string, AttendanceEntry[]> = {};
   for (const entry of entries) {
     const ts = new Date(entry.timestamp);
     if (ts < startDate || ts > endDate) continue;
+    const dateStr = entry.timestamp.split('T')[0];
+    if (!byDate[dateStr]) byDate[dateStr] = [];
+    byDate[dateStr].push(entry);
+  }
 
-    if (entry.type === 'check-in') {
-      lastCheckIn = ts;
-    } else if (entry.type === 'check-out' && lastCheckIn) {
-      totalMs += ts.getTime() - lastCheckIn.getTime();
-      lastCheckIn = null;
+  let totalMs = 0;
+
+  for (const [, dayEntries] of Object.entries(byDate)) {
+    let dayMs = 0;
+    let lastCheckIn: Date | null = null;
+
+    for (const entry of dayEntries) {
+      const ts = new Date(entry.timestamp);
+      if (entry.type === 'check-in') {
+        lastCheckIn = ts;
+      } else if (entry.type === 'check-out' && lastCheckIn) {
+        dayMs += ts.getTime() - lastCheckIn.getTime();
+        lastCheckIn = null;
+      }
     }
+
+    // If only 2 stamps (1 in + 1 out), deduct default break
+    if (dayEntries.length === 2 && breakMinutes > 0) {
+      dayMs -= breakMinutes * 60 * 1000;
+      if (dayMs < 0) dayMs = 0;
+    }
+
+    totalMs += dayMs;
   }
 
   return Math.round((totalMs / (1000 * 60 * 60)) * 100) / 100;

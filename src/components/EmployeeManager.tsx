@@ -21,6 +21,7 @@ interface EmployeeFormData {
   expectedOut1: string;
   expectedIn2: string;
   expectedOut2: string;
+  defaultBreakMinutes: number;
 }
 
 const emptyForm: EmployeeFormData = {
@@ -30,6 +31,7 @@ const emptyForm: EmployeeFormData = {
   expectedOut1: '12:00',
   expectedIn2: '13:00',
   expectedOut2: '17:00',
+  defaultBreakMinutes: 0,
 };
 
 const shiftLabels: Record<ShiftType, string> = {
@@ -62,6 +64,7 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
       expectedOut1: p.expectedOut1,
       expectedIn2: p.expectedIn2,
       expectedOut2: p.expectedOut2,
+      defaultBreakMinutes: p.defaultBreakMinutes ?? 0,
     });
     setOpen(true);
   };
@@ -166,6 +169,21 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                 )}
               </div>
 
+              <div>
+                <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Pausa pranzo (minuti)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={form.defaultBreakMinutes}
+                  onChange={e => setForm(f => ({ ...f, defaultBreakMinutes: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Detratta automaticamente se la risorsa timbra solo 2 volte (ingresso/uscita)
+                </p>
+              </div>
+
               <Button onClick={handleSave} className="w-full">{editingId ? 'Salva Modifiche' : 'Aggiungi'}</Button>
             </div>
           </DialogContent>
@@ -190,6 +208,9 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                     {p.expectedIn1}–{p.expectedOut1}
                     {p.expectedIn2 && ` | ${p.expectedIn2}–${p.expectedOut2}`}
                   </span>
+                  {(p.defaultBreakMinutes ?? 0) > 0 && (
+                    <span className="text-xs text-muted-foreground">· Pausa {p.defaultBreakMinutes}min</span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">

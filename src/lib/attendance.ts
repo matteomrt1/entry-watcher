@@ -143,6 +143,12 @@ export function updateEntry(id: string, updates: Partial<Omit<AttendanceEntry, '
   }
 }
 
+export function deleteEntry(id: string): void {
+  const data = loadData();
+  data.entries = data.entries.filter(e => e.id !== id);
+  saveData(data);
+}
+
 // ── Leave CRUD ──
 
 export function addLeave(leave: Omit<LeaveEntry, 'id'>): LeaveEntry {

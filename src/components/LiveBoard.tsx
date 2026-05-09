@@ -206,7 +206,7 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
   return (
     <div className="space-y-5">
       {/* ── KPI Header ── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="border-accent/30 bg-accent/5">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-lg bg-accent/15 p-2.5">
@@ -214,9 +214,19 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
             </div>
             <div>
               <p className="text-2xl font-bold font-mono leading-none">{inCount}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                In Sede / {roster.length}
-              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">In Sede / {roster.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-warning/30 bg-warning/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="rounded-lg bg-warning/15 p-2.5">
+              <Palmtree className="h-5 w-5 text-warning" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold font-mono leading-none">{leaveCount}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">In Ferie/Permesso</p>
             </div>
           </CardContent>
         </Card>
@@ -228,18 +238,18 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
             </div>
             <div>
               <p className="text-2xl font-bold font-mono leading-none">{outCount}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Assenti / Fuori</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Fuori sede</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className={totalAnomalyCount > 0 ? 'border-destructive/40 bg-destructive/5' : 'border-muted'}>
+        <Card className={(totalAnomalyCount + pendingCount) > 0 ? 'border-destructive/40 bg-destructive/5' : 'border-muted'}>
           <CardContent className="p-4 flex items-center gap-3">
-            <div className={`rounded-lg p-2.5 ${totalAnomalyCount > 0 ? 'bg-destructive/15' : 'bg-muted'}`}>
-              <ShieldAlert className={`h-5 w-5 ${totalAnomalyCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
+            <div className={`rounded-lg p-2.5 ${(totalAnomalyCount + pendingCount) > 0 ? 'bg-destructive/15' : 'bg-muted'}`}>
+              <ShieldAlert className={`h-5 w-5 ${(totalAnomalyCount + pendingCount) > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
             </div>
             <div>
-              <p className="text-2xl font-bold font-mono leading-none">{totalAnomalyCount}</p>
+              <p className="text-2xl font-bold font-mono leading-none">{totalAnomalyCount + pendingCount}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Anomalie</p>
             </div>
           </CardContent>

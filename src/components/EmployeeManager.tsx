@@ -175,19 +175,43 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                 )}
               </div>
 
-              <div>
-                <Label className="flex items-center gap-1"><Clock className="h-3 w-3" /> Pausa pranzo (minuti)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={form.defaultBreakMinutes}
-                  onChange={e => setForm(f => ({ ...f, defaultBreakMinutes: parseInt(e.target.value) || 0 }))}
-                  placeholder="0"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Detratta automaticamente se la risorsa timbra solo 2 volte (ingresso/uscita)
+              <div className="rounded-lg border border-border p-3 space-y-3 bg-muted/30">
+                <p className="text-sm font-semibold flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Pausa pranzo automatica</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Inizio pausa</Label>
+                    <Input
+                      type="time"
+                      value={form.lunchBreakStart}
+                      onChange={e => setForm(f => ({ ...f, lunchBreakStart: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Fine pausa</Label>
+                    <Input
+                      type="time"
+                      value={form.lunchBreakEnd}
+                      onChange={e => setForm(f => ({ ...f, lunchBreakEnd: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Detratta nei giorni con sole 2 timbrature, solo per la porzione che cade nell'orario lavorato.
                 </p>
+                <div>
+                  <Label className="text-xs">Minuti fissi (fallback)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={120}
+                    value={form.defaultBreakMinutes}
+                    onChange={e => setForm(f => ({ ...f, defaultBreakMinutes: parseInt(e.target.value) || 0 }))}
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Usato se la finestra pausa non è impostata.
+                  </p>
+                </div>
               </div>
 
               <Button onClick={handleSave} className="w-full">{editingId ? 'Salva Modifiche' : 'Aggiungi'}</Button>

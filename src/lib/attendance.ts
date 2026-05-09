@@ -321,7 +321,7 @@ export function calculateHours(
 
   let totalMs = 0;
 
-  for (const [, dayEntries] of Object.entries(byDate)) {
+  for (const [dateStr, dayEntries] of Object.entries(byDate)) {
     let dayMs = 0;
     let lastCheckIn: Date | null = null;
 
@@ -335,10 +335,32 @@ export function calculateHours(
       }
     }
 
-    // If only 2 stamps (1 in + 1 out), deduct default break
-    if (dayEntries.length === 2 && breakMinutes > 0) {
-      dayMs -= breakMinutes * 60 * 1000;
-      if (dayMs < 0) dayMs = 0;
+    // 2 stamps (1 in + 1 out) → applica detrazione pausa pranzo
+    if (dayEntries.length === 2) {
+      const inEntry = dayEntries.find(e => e.type === 'check-in');
+      const outEntry = dayEntries.find(e => e.type === 'check-out');
+      if (inEntry && outEntry) {
+        const inTs = new Date(inEntry.timestamp);
+        const outTs = new Date(outEntry.timestamp);
+        let deductMin = 0;
+
+        if (lunchStart && lunchEnd) {
+          // Costruisci finestra pausa nel giorno locale
+          const [ls, lsm] = lunchStart.split(':').map(Number);
+          const [le, lem] = lunchEnd.split(':').map(Number);
+          const [y, mo, da] = dateStr.split('-').map(Number);
+          const breakStart = new Date(y, mo - 1, da, ls, lsm, 0);
+          const breakEnd = new Date(y, mo - 1, da, le, lem, 0);
+          deductMin = overlapMinutes(inTs, outTs, breakStart, breakEnd);
+        } else if (breakMinutes > 0) {
+          deductMin = breakMinutes;
+        }
+
+        if (deductMin > 0) {
+          dayMs -= deductMin * 60 * 1000;
+          if (dayMs < 0) dayMs = 0;
+        }
+      }
     }
 
     totalMs += dayMs;

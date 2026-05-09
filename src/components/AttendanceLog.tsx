@@ -64,8 +64,8 @@ export default function AttendanceLog({ refreshKey, limit = 20, showFilters = fa
   const clearFilters = () => {
     setFilterEmployee('all');
     setFilterType('all');
-    setFilterDateFrom('');
-    setFilterDateTo('');
+    setFilterDateFrom(defaultFromDate);
+    setFilterDateTo(defaultToDate);
   };
 
   const confirmDelete = () => {

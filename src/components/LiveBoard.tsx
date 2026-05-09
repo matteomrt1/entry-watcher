@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/dialog';
 import {
   UserCheck,
-  UserX,
   AlertTriangle,
   Clock,
   LogOut,
@@ -28,7 +27,6 @@ import {
   Timer,
   Activity,
   Palmtree,
-  AlarmClock,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';

@@ -246,11 +246,12 @@ export function runReconciliation(): number {
   const today = new Date().toISOString().split('T')[0];
   let generated = 0;
 
-  // Group entries by date and employee (exclude today)
+  // Group entries by date (LOCALE) and employee (exclude today)
+  const todayKey = localDateKey(new Date());
   const grouped: Record<string, Record<string, AttendanceEntry[]>> = {};
   for (const entry of data.entries) {
-    const date = entry.timestamp.split('T')[0];
-    if (date >= today) continue;
+    const date = localDateKey(entry.timestamp);
+    if (date >= todayKey) continue;
     if (!grouped[date]) grouped[date] = {};
     if (!grouped[date][entry.employeeName]) grouped[date][entry.employeeName] = [];
     grouped[date][entry.employeeName].push(entry);
@@ -299,17 +300,21 @@ export function calculateHours(
   const data = loadData();
   const profile = data.employees.find(p => p.name === employeeName);
   const breakMinutes = profile?.defaultBreakMinutes ?? 0;
+  const lunchStart = profile?.lunchBreakStart;
+  const lunchEnd = profile?.lunchBreakEnd;
 
+  // Includiamo anche le entries con requiresReview: rappresentano timbrature reali
+  // (auto-filled) che vanno comunque conteggiate. Il flag guida solo la UI.
   const entries = data.entries
-    .filter(e => e.employeeName === employeeName && !e.requiresReview)
+    .filter(e => e.employeeName === employeeName)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  // Group by date to detect 2-stamp days for break deduction
+  // Group by LOCAL date to detect 2-stamp days for break deduction
   const byDate: Record<string, AttendanceEntry[]> = {};
   for (const entry of entries) {
     const ts = new Date(entry.timestamp);
     if (ts < startDate || ts > endDate) continue;
-    const dateStr = entry.timestamp.split('T')[0];
+    const dateStr = localDateKey(entry.timestamp);
     if (!byDate[dateStr]) byDate[dateStr] = [];
     byDate[dateStr].push(entry);
   }

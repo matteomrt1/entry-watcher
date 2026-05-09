@@ -18,7 +18,28 @@ export interface EmployeeProfile {
   expectedIn2: string;
   expectedOut2: string;
   weeklyHours?: number; // default 40
-  defaultBreakMinutes?: number; // pausa pranzo default (es. 30), detratta se solo 2 timbrature
+  defaultBreakMinutes?: number; // fallback fisso (minuti) se non è impostata la finestra pausa
+  lunchBreakStart?: string; // HH:MM finestra pausa pranzo
+  lunchBreakEnd?: string;   // HH:MM finestra pausa pranzo
+}
+
+// ── Helpers timezone-safe ──
+
+/** Restituisce la data in formato YYYY-MM-DD calcolata in timezone LOCALE. */
+export function localDateKey(input: string | Date): string {
+  const d = typeof input === 'string' ? new Date(input) : input;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Minuti di sovrapposizione tra due intervalli di Date (positivo o 0). */
+export function overlapMinutes(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): number {
+  const start = Math.max(aStart.getTime(), bStart.getTime());
+  const end = Math.min(aEnd.getTime(), bEnd.getTime());
+  if (end <= start) return 0;
+  return Math.round((end - start) / 60000);
 }
 
 // ── System Settings ──
@@ -225,11 +246,12 @@ export function runReconciliation(): number {
   const today = new Date().toISOString().split('T')[0];
   let generated = 0;
 
-  // Group entries by date and employee (exclude today)
+  // Group entries by date (LOCALE) and employee (exclude today)
+  const todayKey = localDateKey(new Date());
   const grouped: Record<string, Record<string, AttendanceEntry[]>> = {};
   for (const entry of data.entries) {
-    const date = entry.timestamp.split('T')[0];
-    if (date >= today) continue;
+    const date = localDateKey(entry.timestamp);
+    if (date >= todayKey) continue;
     if (!grouped[date]) grouped[date] = {};
     if (!grouped[date][entry.employeeName]) grouped[date][entry.employeeName] = [];
     grouped[date][entry.employeeName].push(entry);
@@ -278,24 +300,28 @@ export function calculateHours(
   const data = loadData();
   const profile = data.employees.find(p => p.name === employeeName);
   const breakMinutes = profile?.defaultBreakMinutes ?? 0;
+  const lunchStart = profile?.lunchBreakStart;
+  const lunchEnd = profile?.lunchBreakEnd;
 
+  // Includiamo anche le entries con requiresReview: rappresentano timbrature reali
+  // (auto-filled) che vanno comunque conteggiate. Il flag guida solo la UI.
   const entries = data.entries
-    .filter(e => e.employeeName === employeeName && !e.requiresReview)
+    .filter(e => e.employeeName === employeeName)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  // Group by date to detect 2-stamp days for break deduction
+  // Group by LOCAL date to detect 2-stamp days for break deduction
   const byDate: Record<string, AttendanceEntry[]> = {};
   for (const entry of entries) {
     const ts = new Date(entry.timestamp);
     if (ts < startDate || ts > endDate) continue;
-    const dateStr = entry.timestamp.split('T')[0];
+    const dateStr = localDateKey(entry.timestamp);
     if (!byDate[dateStr]) byDate[dateStr] = [];
     byDate[dateStr].push(entry);
   }
 
   let totalMs = 0;
 
-  for (const [, dayEntries] of Object.entries(byDate)) {
+  for (const [dateStr, dayEntries] of Object.entries(byDate)) {
     let dayMs = 0;
     let lastCheckIn: Date | null = null;
 
@@ -309,10 +335,32 @@ export function calculateHours(
       }
     }
 
-    // If only 2 stamps (1 in + 1 out), deduct default break
-    if (dayEntries.length === 2 && breakMinutes > 0) {
-      dayMs -= breakMinutes * 60 * 1000;
-      if (dayMs < 0) dayMs = 0;
+    // 2 stamps (1 in + 1 out) → applica detrazione pausa pranzo
+    if (dayEntries.length === 2) {
+      const inEntry = dayEntries.find(e => e.type === 'check-in');
+      const outEntry = dayEntries.find(e => e.type === 'check-out');
+      if (inEntry && outEntry) {
+        const inTs = new Date(inEntry.timestamp);
+        const outTs = new Date(outEntry.timestamp);
+        let deductMin = 0;
+
+        if (lunchStart && lunchEnd) {
+          // Costruisci finestra pausa nel giorno locale
+          const [ls, lsm] = lunchStart.split(':').map(Number);
+          const [le, lem] = lunchEnd.split(':').map(Number);
+          const [y, mo, da] = dateStr.split('-').map(Number);
+          const breakStart = new Date(y, mo - 1, da, ls, lsm, 0);
+          const breakEnd = new Date(y, mo - 1, da, le, lem, 0);
+          deductMin = overlapMinutes(inTs, outTs, breakStart, breakEnd);
+        } else if (breakMinutes > 0) {
+          deductMin = breakMinutes;
+        }
+
+        if (deductMin > 0) {
+          dayMs -= deductMin * 60 * 1000;
+          if (dayMs < 0) dayMs = 0;
+        }
+      }
     }
 
     totalMs += dayMs;
@@ -331,9 +379,9 @@ export function getDailyBreakdown(
   const current = new Date(startDate);
 
   while (current <= endDate) {
-    const dateStr = current.toISOString().split('T')[0];
-    const dayStart = new Date(dateStr + 'T00:00:00');
-    const dayEnd = new Date(dateStr + 'T23:59:59');
+    const dateStr = localDateKey(current);
+    const dayStart = new Date(current.getFullYear(), current.getMonth(), current.getDate(), 0, 0, 0);
+    const dayEnd = new Date(current.getFullYear(), current.getMonth(), current.getDate(), 23, 59, 59);
 
     const hours = calculateHours(employeeName, dayStart, dayEnd);
     const leave = data.leaves.find(

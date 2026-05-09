@@ -20,13 +20,13 @@ import {
 } from '@/components/ui/dialog';
 import {
   UserCheck,
-  UserX,
   AlertTriangle,
   Clock,
   LogOut,
   ShieldAlert,
   Timer,
   Activity,
+  Palmtree,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -42,10 +42,15 @@ interface AnomalyItem {
   entry?: AttendanceEntry;
 }
 
+type RosterStatus = 'in' | 'out' | 'leave' | 'pending';
+
 export default function LiveBoard({ refreshKey }: LiveBoardProps) {
   const [resolveTarget, setResolveTarget] = useState<AnomalyItem | null>(null);
 
-  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
   const now = useMemo(() => new Date(), [refreshKey]);
 
   const profiles = useMemo(() => getEmployeesProfiles(), [refreshKey]);
@@ -57,27 +62,58 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
     const allNames = new Set<string>();
     profiles.forEach(p => allNames.add(p.name));
     data.entries.forEach(e => allNames.add(e.employeeName));
+    data.leaves.forEach(l => allNames.add(l.employeeName));
+
+    const nowMin = now.getHours() * 60 + now.getMinutes();
 
     return Array.from(allNames).map(name => {
+      const profile = profiles.find(p => p.name === name) ?? null;
+      const leaveToday = data.leaves.find(l => l.employeeName === name && l.date === today);
+
       const todayEntries = data.entries
-        .filter(e => e.employeeName === name && e.timestamp.startsWith(today))
+        .filter(e => {
+          const ts = new Date(e.timestamp);
+          const key = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}-${String(ts.getDate()).padStart(2, '0')}`;
+          return e.employeeName === name && key === today;
+        })
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
       const last = todayEntries[todayEntries.length - 1] ?? null;
-      const isIn = last?.type === 'check-in';
+      const lastIsCheckIn = last?.type === 'check-in';
+
+      // Sessione aperta scaduta? Se ultima è check-in ma è già passato l'orario di uscita previsto + 60 min
+      let sessionExpired = false;
+      if (lastIsCheckIn && profile) {
+        const expectedOut = profile.expectedOut2 || profile.expectedOut1;
+        if (expectedOut) {
+          const [h, m] = expectedOut.split(':').map(Number);
+          const expMin = h * 60 + m;
+          if (nowMin > expMin + 60) sessionExpired = true;
+        }
+      }
+
+      let status: RosterStatus;
+      if (leaveToday) status = 'leave';
+      else if (lastIsCheckIn && !sessionExpired) status = 'in';
+      else if (lastIsCheckIn && sessionExpired) status = 'pending';
+      else status = 'out';
 
       return {
         name,
-        isIn,
+        status,
+        isIn: status === 'in',
         lastTimestamp: last ? new Date(last.timestamp) : null,
-        profile: profiles.find(p => p.name === name) ?? null,
+        profile,
         todayCount: todayEntries.length,
+        leaveType: leaveToday?.type,
       };
     });
-  }, [profiles, data, today, refreshKey]);
+  }, [profiles, data, today, now, refreshKey]);
 
-  const inCount = roster.filter(r => r.isIn).length;
-  const outCount = roster.length - inCount;
+  const inCount = roster.filter(r => r.status === 'in').length;
+  const leaveCount = roster.filter(r => r.status === 'leave').length;
+  const pendingCount = roster.filter(r => r.status === 'pending').length;
+  const outCount = roster.filter(r => r.status === 'out').length;
 
   // ── Anomalie ──
   const anomalies = useMemo<AnomalyItem[]>(() => {
@@ -170,7 +206,7 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
   return (
     <div className="space-y-5">
       {/* ── KPI Header ── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="border-accent/30 bg-accent/5">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="rounded-lg bg-accent/15 p-2.5">
@@ -178,9 +214,19 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
             </div>
             <div>
               <p className="text-2xl font-bold font-mono leading-none">{inCount}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                In Sede / {roster.length}
-              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">In Sede / {roster.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-warning/30 bg-warning/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="rounded-lg bg-warning/15 p-2.5">
+              <Palmtree className="h-5 w-5 text-warning" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold font-mono leading-none">{leaveCount}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">In Ferie/Permesso</p>
             </div>
           </CardContent>
         </Card>
@@ -192,18 +238,18 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
             </div>
             <div>
               <p className="text-2xl font-bold font-mono leading-none">{outCount}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Assenti / Fuori</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Fuori sede</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className={totalAnomalyCount > 0 ? 'border-destructive/40 bg-destructive/5' : 'border-muted'}>
+        <Card className={(totalAnomalyCount + pendingCount) > 0 ? 'border-destructive/40 bg-destructive/5' : 'border-muted'}>
           <CardContent className="p-4 flex items-center gap-3">
-            <div className={`rounded-lg p-2.5 ${totalAnomalyCount > 0 ? 'bg-destructive/15' : 'bg-muted'}`}>
-              <ShieldAlert className={`h-5 w-5 ${totalAnomalyCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
+            <div className={`rounded-lg p-2.5 ${(totalAnomalyCount + pendingCount) > 0 ? 'bg-destructive/15' : 'bg-muted'}`}>
+              <ShieldAlert className={`h-5 w-5 ${(totalAnomalyCount + pendingCount) > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
             </div>
             <div>
-              <p className="text-2xl font-bold font-mono leading-none">{totalAnomalyCount}</p>
+              <p className="text-2xl font-bold font-mono leading-none">{totalAnomalyCount + pendingCount}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Anomalie</p>
             </div>
           </CardContent>
@@ -221,48 +267,64 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
             <ScrollArea className="h-[360px] pr-2">
               <div className="grid grid-cols-2 gap-2">
                 {roster
-                  .sort((a, b) => (a.isIn === b.isIn ? a.name.localeCompare(b.name) : a.isIn ? -1 : 1))
-                  .map(r => (
-                    <div
-                      key={r.name}
-                      className={`flex items-center gap-2.5 rounded-lg border p-2.5 transition-colors ${
-                        r.isIn
-                          ? 'border-accent/40 bg-accent/5'
-                          : 'border-border bg-muted/30 opacity-60'
-                      }`}
-                    >
-                      <div className="relative">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-[10px] font-semibold bg-secondary text-secondary-foreground">
-                            {initials(r.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span
-                          className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card ${
-                            r.isIn ? 'bg-accent animate-pulse' : 'bg-muted-foreground/40'
-                          }`}
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium truncate">{r.name}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {r.lastTimestamp
-                            ? format(r.lastTimestamp, 'HH:mm', { locale: it })
-                            : '—'}
-                        </p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={`text-[9px] px-1.5 py-0 ${
-                          r.isIn
-                            ? 'border-accent/40 text-accent'
-                            : 'border-border text-muted-foreground'
-                        }`}
+                  .slice()
+                  .sort((a, b) => {
+                    const order: Record<RosterStatus, number> = { in: 0, pending: 1, leave: 2, out: 3 };
+                    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+                    return a.name.localeCompare(b.name);
+                  })
+                  .map(r => {
+                    const cardCls =
+                      r.status === 'in' ? 'border-accent/40 bg-accent/5'
+                      : r.status === 'pending' ? 'border-destructive/40 bg-destructive/5'
+                      : r.status === 'leave' ? 'border-warning/40 bg-warning/5'
+                      : 'border-border bg-muted/30 opacity-60';
+                    const dotCls =
+                      r.status === 'in' ? 'bg-accent animate-pulse'
+                      : r.status === 'pending' ? 'bg-destructive animate-pulse'
+                      : r.status === 'leave' ? 'bg-warning'
+                      : 'bg-muted-foreground/40';
+                    const badgeCls =
+                      r.status === 'in' ? 'border-accent/40 text-accent'
+                      : r.status === 'pending' ? 'border-destructive/40 text-destructive'
+                      : r.status === 'leave' ? 'border-warning/40 text-warning'
+                      : 'border-border text-muted-foreground';
+                    const badgeLabel =
+                      r.status === 'in' ? 'IN'
+                      : r.status === 'pending' ? 'APERTA'
+                      : r.status === 'leave' ? (r.leaveType ?? 'LEAVE').toUpperCase()
+                      : 'OUT';
+                    return (
+                      <div
+                        key={r.name}
+                        className={`flex items-center gap-2.5 rounded-lg border p-2.5 transition-colors ${cardCls}`}
                       >
-                        {r.isIn ? 'IN' : 'OUT'}
-                      </Badge>
-                    </div>
-                  ))}
+                        <div className="relative">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-[10px] font-semibold bg-secondary text-secondary-foreground">
+                              {initials(r.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card ${dotCls}`}
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium truncate">{r.name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {r.status === 'leave'
+                              ? 'Assenza giustificata'
+                              : r.lastTimestamp
+                                ? format(r.lastTimestamp, 'HH:mm', { locale: it })
+                                : '—'}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${badgeCls}`}>
+                          {badgeLabel}
+                        </Badge>
+                      </div>
+                    );
+                  })}
                 {roster.length === 0 && (
                   <p className="col-span-2 text-sm text-muted-foreground text-center py-8">
                     Nessuna risorsa registrata

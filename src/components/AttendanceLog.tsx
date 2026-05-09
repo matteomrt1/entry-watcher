@@ -15,10 +15,23 @@ interface AttendanceLogProps {
 }
 
 export default function AttendanceLog({ refreshKey, limit = 20, showFilters = false, onUpdate }: AttendanceLogProps) {
+  // Default: ultimi 60 giorni quando i filtri sono attivi
+  const defaultFromDate = useMemo(() => {
+    if (!showFilters) return '';
+    const d = new Date();
+    d.setDate(d.getDate() - 60);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [showFilters]);
+  const defaultToDate = useMemo(() => {
+    if (!showFilters) return '';
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [showFilters]);
+
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterType, setFilterType] = useState<'all' | 'check-in' | 'check-out'>('all');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState(defaultFromDate);
+  const [filterDateTo, setFilterDateTo] = useState(defaultToDate);
   const [showFilterBar, setShowFilterBar] = useState(showFilters);
   const [deleteTarget, setDeleteTarget] = useState<AttendanceEntry | null>(null);
 
@@ -46,13 +59,13 @@ export default function AttendanceLog({ refreshKey, limit = 20, showFilters = fa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, limit, filterEmployee, filterType, filterDateFrom, filterDateTo]);
 
-  const hasActiveFilters = filterEmployee !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo;
+  const hasActiveFilters = filterEmployee !== 'all' || filterType !== 'all' || filterDateFrom !== defaultFromDate || filterDateTo !== defaultToDate;
 
   const clearFilters = () => {
     setFilterEmployee('all');
     setFilterType('all');
-    setFilterDateFrom('');
-    setFilterDateTo('');
+    setFilterDateFrom(defaultFromDate);
+    setFilterDateTo(defaultToDate);
   };
 
   const confirmDelete = () => {

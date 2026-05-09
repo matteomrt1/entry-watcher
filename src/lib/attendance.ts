@@ -379,9 +379,9 @@ export function getDailyBreakdown(
   const current = new Date(startDate);
 
   while (current <= endDate) {
-    const dateStr = current.toISOString().split('T')[0];
-    const dayStart = new Date(dateStr + 'T00:00:00');
-    const dayEnd = new Date(dateStr + 'T23:59:59');
+    const dateStr = localDateKey(current);
+    const dayStart = new Date(current.getFullYear(), current.getMonth(), current.getDate(), 0, 0, 0);
+    const dayEnd = new Date(current.getFullYear(), current.getMonth(), current.getDate(), 23, 59, 59);
 
     const hours = calculateHours(employeeName, dayStart, dayEnd);
     const leave = data.leaves.find(

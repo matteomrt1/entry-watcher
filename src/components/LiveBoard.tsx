@@ -27,6 +27,8 @@ import {
   ShieldAlert,
   Timer,
   Activity,
+  Palmtree,
+  AlarmClock,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';

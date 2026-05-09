@@ -42,10 +42,15 @@ interface AnomalyItem {
   entry?: AttendanceEntry;
 }
 
+type RosterStatus = 'in' | 'out' | 'leave' | 'pending';
+
 export default function LiveBoard({ refreshKey }: LiveBoardProps) {
   const [resolveTarget, setResolveTarget] = useState<AnomalyItem | null>(null);
 
-  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
   const now = useMemo(() => new Date(), [refreshKey]);
 
   const profiles = useMemo(() => getEmployeesProfiles(), [refreshKey]);
@@ -57,27 +62,58 @@ export default function LiveBoard({ refreshKey }: LiveBoardProps) {
     const allNames = new Set<string>();
     profiles.forEach(p => allNames.add(p.name));
     data.entries.forEach(e => allNames.add(e.employeeName));
+    data.leaves.forEach(l => allNames.add(l.employeeName));
+
+    const nowMin = now.getHours() * 60 + now.getMinutes();
 
     return Array.from(allNames).map(name => {
+      const profile = profiles.find(p => p.name === name) ?? null;
+      const leaveToday = data.leaves.find(l => l.employeeName === name && l.date === today);
+
       const todayEntries = data.entries
-        .filter(e => e.employeeName === name && e.timestamp.startsWith(today))
+        .filter(e => {
+          const ts = new Date(e.timestamp);
+          const key = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}-${String(ts.getDate()).padStart(2, '0')}`;
+          return e.employeeName === name && key === today;
+        })
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
       const last = todayEntries[todayEntries.length - 1] ?? null;
-      const isIn = last?.type === 'check-in';
+      const lastIsCheckIn = last?.type === 'check-in';
+
+      // Sessione aperta scaduta? Se ultima è check-in ma è già passato l'orario di uscita previsto + 60 min
+      let sessionExpired = false;
+      if (lastIsCheckIn && profile) {
+        const expectedOut = profile.expectedOut2 || profile.expectedOut1;
+        if (expectedOut) {
+          const [h, m] = expectedOut.split(':').map(Number);
+          const expMin = h * 60 + m;
+          if (nowMin > expMin + 60) sessionExpired = true;
+        }
+      }
+
+      let status: RosterStatus;
+      if (leaveToday) status = 'leave';
+      else if (lastIsCheckIn && !sessionExpired) status = 'in';
+      else if (lastIsCheckIn && sessionExpired) status = 'pending';
+      else status = 'out';
 
       return {
         name,
-        isIn,
+        status,
+        isIn: status === 'in',
         lastTimestamp: last ? new Date(last.timestamp) : null,
-        profile: profiles.find(p => p.name === name) ?? null,
+        profile,
         todayCount: todayEntries.length,
+        leaveType: leaveToday?.type,
       };
     });
-  }, [profiles, data, today, refreshKey]);
+  }, [profiles, data, today, now, refreshKey]);
 
-  const inCount = roster.filter(r => r.isIn).length;
-  const outCount = roster.length - inCount;
+  const inCount = roster.filter(r => r.status === 'in').length;
+  const leaveCount = roster.filter(r => r.status === 'leave').length;
+  const pendingCount = roster.filter(r => r.status === 'pending').length;
+  const outCount = roster.filter(r => r.status === 'out').length;
 
   // ── Anomalie ──
   const anomalies = useMemo<AnomalyItem[]>(() => {

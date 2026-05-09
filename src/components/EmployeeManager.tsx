@@ -238,7 +238,10 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                     {p.expectedIn1}–{p.expectedOut1}
                     {p.expectedIn2 && ` | ${p.expectedIn2}–${p.expectedOut2}`}
                   </span>
-                  {(p.defaultBreakMinutes ?? 0) > 0 && (
+                  {p.lunchBreakStart && p.lunchBreakEnd && (
+                    <span className="text-xs text-muted-foreground">· Pausa {p.lunchBreakStart}–{p.lunchBreakEnd}</span>
+                  )}
+                  {(!p.lunchBreakStart || !p.lunchBreakEnd) && (p.defaultBreakMinutes ?? 0) > 0 && (
                     <span className="text-xs text-muted-foreground">· Pausa {p.defaultBreakMinutes}min</span>
                   )}
                 </div>

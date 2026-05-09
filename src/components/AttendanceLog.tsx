@@ -59,7 +59,7 @@ export default function AttendanceLog({ refreshKey, limit = 20, showFilters = fa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, limit, filterEmployee, filterType, filterDateFrom, filterDateTo]);
 
-  const hasActiveFilters = filterEmployee !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo;
+  const hasActiveFilters = filterEmployee !== 'all' || filterType !== 'all' || filterDateFrom !== defaultFromDate || filterDateTo !== defaultToDate;
 
   const clearFilters = () => {
     setFilterEmployee('all');

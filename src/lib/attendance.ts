@@ -18,7 +18,28 @@ export interface EmployeeProfile {
   expectedIn2: string;
   expectedOut2: string;
   weeklyHours?: number; // default 40
-  defaultBreakMinutes?: number; // pausa pranzo default (es. 30), detratta se solo 2 timbrature
+  defaultBreakMinutes?: number; // fallback fisso (minuti) se non è impostata la finestra pausa
+  lunchBreakStart?: string; // HH:MM finestra pausa pranzo
+  lunchBreakEnd?: string;   // HH:MM finestra pausa pranzo
+}
+
+// ── Helpers timezone-safe ──
+
+/** Restituisce la data in formato YYYY-MM-DD calcolata in timezone LOCALE. */
+export function localDateKey(input: string | Date): string {
+  const d = typeof input === 'string' ? new Date(input) : input;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Minuti di sovrapposizione tra due intervalli di Date (positivo o 0). */
+export function overlapMinutes(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): number {
+  const start = Math.max(aStart.getTime(), bStart.getTime());
+  const end = Math.min(aEnd.getTime(), bEnd.getTime());
+  if (end <= start) return 0;
+  return Math.round((end - start) / 60000);
 }
 
 // ── System Settings ──

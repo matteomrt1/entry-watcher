@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor, Wallet, Briefcase } from 'lucide-react';
-import { runReconciliation } from '@/lib/attendance';
+import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor, Wallet, Briefcase, Loader2, CloudOff } from 'lucide-react';
+import { runReconciliation, runAutoFill, initData, isServerAvailable } from '@/lib/attendance';
 import { toast } from 'sonner';
 import QRScanner from '@/components/QRScanner';
 import AttendanceLog from '@/components/AttendanceLog';
@@ -32,20 +32,41 @@ const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [refreshKey, setRefreshKey] = useState(0);
-  const reconDone = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const [serverOk, setServerOk] = useState(false);
+  const bootDone = useRef(false);
 
   const refresh = () => setRefreshKey(k => k + 1);
 
-  // Auto-reconciliation on first load
   useEffect(() => {
-    if (reconDone.current) return;
-    reconDone.current = true;
-    const count = runReconciliation();
-    if (count > 0) {
-      toast.info(`Riconciliazione automatica: ${count} uscita/e mancante/i generate`);
+    if (bootDone.current) return;
+    bootDone.current = true;
+    (async () => {
+      await initData();
+      const ok = isServerAvailable();
+      setServerOk(ok);
+      if (!ok) {
+        toast.warning('Server locale non raggiungibile (porta 3001) — uso storage browser come fallback');
+      }
+      const filled = runAutoFill();
+      if (filled > 0) toast.info(`Autocompilazione: generate ${filled} timbrature per risorse automatiche`);
+      const recon = runReconciliation();
+      if (recon > 0) toast.info(`Riconciliazione: ${recon} uscita/e mancante/i generate`);
+      setLoading(false);
       refresh();
-    }
+    })();
   }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm">Caricamento dati dal server locale…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -63,9 +84,12 @@ const Index = () => {
           </div>
           <div className="flex items-center gap-2">
             <DataManager onImport={refresh} />
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-3 py-1.5 rounded-full">
-              <Database className="h-3 w-3" />
-              <span>Locale</span>
+            <div
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full ${serverOk ? 'bg-secondary text-muted-foreground' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'}`}
+              title={serverOk ? 'Connesso al server locale (porta 3001)' : 'Server non raggiungibile — fallback localStorage'}
+            >
+              {serverOk ? <Database className="h-3 w-3" /> : <CloudOff className="h-3 w-3" />}
+              <span>{serverOk ? 'Server OK' : 'Solo locale'}</span>
             </div>
           </div>
         </div>

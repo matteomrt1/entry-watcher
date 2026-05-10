@@ -9,18 +9,27 @@ export const SHIFT_PRESETS: Record<Exclude<ShiftType, 'personalizzato'>, { label
   spezzato:   { label: 'Spezzato (08:00–12:00 / 13:00–17:00)', expectedIn1: '08:00', expectedOut1: '12:00', expectedIn2: '13:00', expectedOut2: '17:00' },
 };
 
+export type TrackingMode = 'auto' | 'manual';
+
 export interface EmployeeProfile {
   id: string;
   name: string;
   shift: ShiftType;
+  /**
+   * 'auto'   = camionisti / smart working: nessun QR. Auto-fill giornaliero
+   *            di 4 timbrature (in1/out1/in2/out2) basato sugli orari del turno.
+   * 'manual' = dipendente standard: timbra con QR. Se nella giornata risultano
+   *            esattamente 2 timbrature viene applicata la detrazione pausa.
+   */
+  trackingMode: TrackingMode;
   expectedIn1: string;  // HH:MM
   expectedOut1: string;
   expectedIn2: string;
   expectedOut2: string;
   weeklyHours?: number; // default 40
-  defaultBreakMinutes?: number; // fallback fisso (minuti) se non è impostata la finestra pausa
-  lunchBreakStart?: string; // HH:MM finestra pausa pranzo
-  lunchBreakEnd?: string;   // HH:MM finestra pausa pranzo
+  defaultBreakMinutes?: number; // detrazione pausa fissa (solo modo 'manual')
+  lunchBreakStart?: string; // HH:MM (solo modo 'manual')
+  lunchBreakEnd?: string;   // HH:MM (solo modo 'manual')
 }
 
 // ── Helpers timezone-safe ──
@@ -99,21 +108,101 @@ export interface AttendanceData {
   projects: Project[];
 }
 
-const STORAGE_KEY = 'attendance_data';
+// ── Persistence layer ──
+//
+// Architettura: cache in memoria sincrona idratata all'avvio da `initData()`
+// (async). Il server Express locale (server.js sulla porta 3001) espone
+// GET/POST /api/data e legge/scrive `database.json` nella root del progetto.
+// localStorage rimane come fallback offline e cache di bootstrap istantanea.
 
-export function loadData(): AttendanceData {
+const STORAGE_KEY = 'attendance_data';
+const API_BASE =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE) ||
+  'http://localhost:3001';
+
+const emptyData = (): AttendanceData => ({ entries: [], leaves: [], employees: [], projects: [] });
+
+let _cache: AttendanceData = emptyData();
+let _initialized = false;
+let _serverAvailable = false;
+let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function _hydrateFromLocal(): AttendanceData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { entries: parsed.entries || [], leaves: parsed.leaves || [], employees: parsed.employees || [], projects: parsed.projects || [] };
+      return {
+        entries: parsed.entries || [],
+        leaves: parsed.leaves || [],
+        employees: parsed.employees || [],
+        projects: parsed.projects || [],
+      };
     }
   } catch {}
-  return { entries: [], leaves: [], employees: [], projects: [] };
+  return emptyData();
+}
+
+/**
+ * Idrata la cache leggendo dal server locale; in caso di errore usa localStorage.
+ * Da chiamare UNA VOLTA all'avvio dell'app (in Index.tsx) prima di renderizzare.
+ */
+export async function initData(): Promise<AttendanceData> {
+  // Bootstrap immediato dalla cache locale
+  _cache = _hydrateFromLocal();
+  try {
+    const res = await fetch(`${API_BASE}/api/data`, { cache: 'no-store' });
+    if (res.ok) {
+      const remote = (await res.json()) as Partial<AttendanceData>;
+      _cache = {
+        entries: remote.entries || [],
+        leaves: remote.leaves || [],
+        employees: remote.employees || [],
+        projects: remote.projects || [],
+      };
+      _serverAvailable = true;
+      // Allinea localStorage per uso offline
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_cache)); } catch {}
+    }
+  } catch {
+    _serverAvailable = false;
+  }
+  _initialized = true;
+  return _cache;
+}
+
+export function isServerAvailable(): boolean {
+  return _serverAvailable;
+}
+
+export function isDataInitialized(): boolean {
+  return _initialized;
+}
+
+export function loadData(): AttendanceData {
+  if (!_initialized) {
+    // Fallback sicuro se qualcuno chiama prima di initData()
+    _cache = _hydrateFromLocal();
+    _initialized = true;
+  }
+  return _cache;
 }
 
 export function saveData(data: AttendanceData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  _cache = data;
+  // Persistenza locale immediata
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+  // Push verso il server con debounce (best-effort)
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    fetch(`${API_BASE}/api/data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+      .then(r => { _serverAvailable = r.ok; })
+      .catch(() => { _serverAvailable = false; });
+  }, 200);
 }
 
 // ── Employee CRUD ──
@@ -269,8 +358,10 @@ export function runReconciliation(): number {
       if (count === 0 || count === 2 || count === 4) continue;
       if (count % 2 === 0) continue;
 
-      // Find employee profile and use last expected out time based on shift
+      // Find employee profile
       const profile = data.employees.find(p => p.name === empName);
+      // Le risorse 'auto' vengono gestite da runAutoFill, non dalla riconciliazione QR.
+      if (profile?.trackingMode === 'auto') continue;
       const fallbackTime = profile?.expectedOut2 || profile?.expectedOut1 || '18:00';
 
       const autoEntry: AttendanceEntry = {
@@ -290,6 +381,66 @@ export function runReconciliation(): number {
   return generated;
 }
 
+// ── Auto-fill engine (modalità 'auto': camionisti / smart working) ──
+//
+// Per ogni risorsa con trackingMode === 'auto' garantisce 4 timbrature
+// (in1/out1/in2/out2) per ogni giorno feriale dall'ultimo check fino a IERI
+// incluso. Idempotente: salta i giorni con timbrature esistenti e i giorni
+// con assenza registrata (ferie/permesso/malattia).
+//
+// Da chiamare all'avvio dell'app, dopo initData() e prima della
+// renderizzazione dei tab.
+export function runAutoFill(daysBack: number = 14): number {
+  const data = loadData();
+  const autos = data.employees.filter(p => p.trackingMode === 'auto');
+  if (autos.length === 0) return 0;
+
+  let generated = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (const profile of autos) {
+    // Set di date già popolate per questa risorsa (qualsiasi timbratura)
+    const filledDays = new Set<string>();
+    for (const e of data.entries) {
+      if (e.employeeName === profile.name) filledDays.add(localDateKey(e.timestamp));
+    }
+    const leaveDays = new Set<string>();
+    for (const l of data.leaves) {
+      if (l.employeeName === profile.name) leaveDays.add(l.date);
+    }
+
+    for (let i = daysBack; i >= 1; i--) {
+      const day = new Date(today);
+      day.setDate(today.getDate() - i);
+      const dow = day.getDay();
+      if (dow === 0 || dow === 6) continue; // skip weekend
+      const dateStr = localDateKey(day);
+      if (filledDays.has(dateStr) || leaveDays.has(dateStr)) continue;
+
+      const slots: { time: string; type: 'check-in' | 'check-out' }[] = [];
+      if (profile.expectedIn1)  slots.push({ time: profile.expectedIn1,  type: 'check-in'  });
+      if (profile.expectedOut1) slots.push({ time: profile.expectedOut1, type: 'check-out' });
+      if (profile.expectedIn2)  slots.push({ time: profile.expectedIn2,  type: 'check-in'  });
+      if (profile.expectedOut2) slots.push({ time: profile.expectedOut2, type: 'check-out' });
+
+      for (const s of slots) {
+        data.entries.push({
+          id: crypto.randomUUID(),
+          employeeName: profile.name,
+          timestamp: `${dateStr}T${s.time}:00`,
+          type: s.type,
+          isAutoFilled: true,
+        });
+        generated++;
+      }
+    }
+  }
+
+  if (generated > 0) saveData(data);
+  return generated;
+}
+
 // ── Hours calculation ──
 
 export function calculateHours(
@@ -299,9 +450,11 @@ export function calculateHours(
 ): number {
   const data = loadData();
   const profile = data.employees.find(p => p.name === employeeName);
-  const breakMinutes = profile?.defaultBreakMinutes ?? 0;
-  const lunchStart = profile?.lunchBreakStart;
-  const lunchEnd = profile?.lunchBreakEnd;
+  // Detrazione pausa: solo per modalità 'manual' (i record 'auto' sono già completi).
+  const isManual = (profile?.trackingMode ?? 'manual') === 'manual';
+  const breakMinutes = isManual ? (profile?.defaultBreakMinutes ?? 0) : 0;
+  const lunchStart = isManual ? profile?.lunchBreakStart : undefined;
+  const lunchEnd = isManual ? profile?.lunchBreakEnd : undefined;
 
   // Includiamo anche le entries con requiresReview: rappresentano timbrature reali
   // (auto-filled) che vanno comunque conteggiate. Il flag guida solo la UI.

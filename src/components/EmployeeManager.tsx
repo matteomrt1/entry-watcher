@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react';
-import { getEmployeesProfiles, addEmployee, updateEmployee, deleteEmployee, SHIFT_PRESETS, type EmployeeProfile, type ShiftType } from '@/lib/attendance';
+import { getEmployeesProfiles, addEmployee, updateEmployee, deleteEmployee, SHIFT_PRESETS, type EmployeeProfile, type ShiftType, type TrackingMode } from '@/lib/attendance';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UserPlus, Pencil, Trash2, Clock, Users } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { UserPlus, Pencil, Trash2, Clock, Users, Truck, ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface EmployeeManagerProps {
@@ -16,6 +17,7 @@ interface EmployeeManagerProps {
 
 interface EmployeeFormData {
   name: string;
+  trackingMode: TrackingMode;
   shift: ShiftType;
   expectedIn1: string;
   expectedOut1: string;
@@ -28,6 +30,7 @@ interface EmployeeFormData {
 
 const emptyForm: EmployeeFormData = {
   name: '',
+  trackingMode: 'manual',
   shift: 'spezzato',
   expectedIn1: '08:00',
   expectedOut1: '12:00',
@@ -63,6 +66,7 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
     setEditingId(p.id);
     setForm({
       name: p.name,
+      trackingMode: p.trackingMode ?? 'manual',
       shift: p.shift || 'personalizzato',
       expectedIn1: p.expectedIn1,
       expectedOut1: p.expectedOut1,
@@ -117,6 +121,7 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
   };
 
   const isDoubleShift = form.shift === 'spezzato' || form.shift === 'personalizzato';
+  const isAuto = form.trackingMode === 'auto';
 
   return (
     <div className="space-y-6">
@@ -128,7 +133,7 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
           <DialogTrigger asChild>
             <Button onClick={openNew} className="gap-2"><UserPlus className="h-4 w-4" /> Aggiungi Risorsa</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? 'Modifica Risorsa' : 'Nuova Risorsa'}</DialogTitle>
             </DialogHeader>
@@ -138,8 +143,41 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Mario Rossi" />
               </div>
 
+              {/* Tracking mode toggle */}
+              <div className="rounded-lg border border-border p-3 bg-muted/30">
+                <Label className="text-sm font-semibold mb-2 block">Modalità di tracciamento</Label>
+                <RadioGroup
+                  value={form.trackingMode}
+                  onValueChange={(v) => setForm(f => ({ ...f, trackingMode: v as TrackingMode }))}
+                  className="grid gap-2"
+                >
+                  <label className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${form.trackingMode === 'manual' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                    <RadioGroupItem value="manual" id="tm-manual" className="mt-1" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 font-medium text-sm">
+                        <ScanLine className="h-4 w-4" /> Tracciamento Manuale (QR)
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Dipendente standard: timbra con QR Code. È possibile impostare una detrazione automatica per la pausa pranzo.
+                      </p>
+                    </div>
+                  </label>
+                  <label className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${form.trackingMode === 'auto' ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                    <RadioGroupItem value="auto" id="tm-auto" className="mt-1" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 font-medium text-sm">
+                        <Truck className="h-4 w-4" /> Tracciamento Automatico
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Camionisti / smart working: il sistema autocompila ogni giorno feriale 4 timbrature in base al turno impostato. Nessun QR richiesto.
+                      </p>
+                    </div>
+                  </label>
+                </RadioGroup>
+              </div>
+
               <div>
-                <Label>Turno</Label>
+                <Label>Turno {isAuto && <span className="text-xs text-muted-foreground font-normal">(usato per l'autocompilazione)</span>}</Label>
                 <Select value={form.shift} onValueChange={(v) => handleShiftChange(v as ShiftType)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -175,44 +213,43 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
                 )}
               </div>
 
-              <div className="rounded-lg border border-border p-3 space-y-3 bg-muted/30">
-                <p className="text-sm font-semibold flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Pausa pranzo automatica</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Inizio pausa</Label>
-                    <Input
-                      type="time"
-                      value={form.lunchBreakStart}
-                      onChange={e => setForm(f => ({ ...f, lunchBreakStart: e.target.value }))}
-                    />
+              {/* Pausa pranzo SOLO per modalità manual */}
+              {!isAuto && (
+                <div className="rounded-lg border border-border p-3 space-y-3 bg-muted/30">
+                  <p className="text-sm font-semibold flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Pausa pranzo automatica</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Inizio pausa</Label>
+                      <Input type="time" value={form.lunchBreakStart} onChange={e => setForm(f => ({ ...f, lunchBreakStart: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Fine pausa</Label>
+                      <Input type="time" value={form.lunchBreakEnd} onChange={e => setForm(f => ({ ...f, lunchBreakEnd: e.target.value }))} />
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-xs">Fine pausa</Label>
-                    <Input
-                      type="time"
-                      value={form.lunchBreakEnd}
-                      onChange={e => setForm(f => ({ ...f, lunchBreakEnd: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Detratta nei giorni con sole 2 timbrature, solo per la porzione che cade nell'orario lavorato.
-                </p>
-                <div>
-                  <Label className="text-xs">Minuti fissi (fallback)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={120}
-                    value={form.defaultBreakMinutes}
-                    onChange={e => setForm(f => ({ ...f, defaultBreakMinutes: parseInt(e.target.value) || 0 }))}
-                    placeholder="0"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Usato se la finestra pausa non è impostata.
+                  <p className="text-xs text-muted-foreground">
+                    Detratta nei giorni con sole 2 timbrature, solo per la porzione che cade nell'orario lavorato.
                   </p>
+                  <div>
+                    <Label className="text-xs">Minuti fissi (fallback)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={120}
+                      value={form.defaultBreakMinutes}
+                      onChange={e => setForm(f => ({ ...f, defaultBreakMinutes: parseInt(e.target.value) || 0 }))}
+                      placeholder="0"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Usato se la finestra pausa non è impostata.</p>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {isAuto && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+                  <strong className="text-foreground">Nota:</strong> per le risorse in modalità automatica le ore lavorate sono già coerenti con il turno; nessuna pausa viene detratta in calcolo.
+                </div>
+              )}
 
               <Button onClick={handleSave} className="w-full">{editingId ? 'Salva Modifiche' : 'Aggiungi'}</Button>
             </div>
@@ -228,34 +265,42 @@ export default function EmployeeManager({ refreshKey, onUpdate }: EmployeeManage
         </div>
       ) : (
         <div className="grid gap-3">
-          {profiles.map(p => (
-            <div key={p.id} className="stat-card flex items-center justify-between">
-              <div>
-                <p className="font-semibold">{p.name}</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-primary">{shiftLabels[p.shift || 'personalizzato']}</span>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {p.expectedIn1}–{p.expectedOut1}
-                    {p.expectedIn2 && ` | ${p.expectedIn2}–${p.expectedOut2}`}
-                  </span>
-                  {p.lunchBreakStart && p.lunchBreakEnd && (
-                    <span className="text-xs text-muted-foreground">· Pausa {p.lunchBreakStart}–{p.lunchBreakEnd}</span>
-                  )}
-                  {(!p.lunchBreakStart || !p.lunchBreakEnd) && (p.defaultBreakMinutes ?? 0) > 0 && (
-                    <span className="text-xs text-muted-foreground">· Pausa {p.defaultBreakMinutes}min</span>
-                  )}
+          {profiles.map(p => {
+            const mode = p.trackingMode ?? 'manual';
+            return (
+              <div key={p.id} className="stat-card flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold">{p.name}</p>
+                    <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${mode === 'auto' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-primary/15 text-primary'}`}>
+                      {mode === 'auto' ? '⚡ Auto' : '📷 QR'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-primary">{shiftLabels[p.shift || 'personalizzato']}</span>
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {p.expectedIn1}–{p.expectedOut1}
+                      {p.expectedIn2 && ` | ${p.expectedIn2}–${p.expectedOut2}`}
+                    </span>
+                    {mode === 'manual' && p.lunchBreakStart && p.lunchBreakEnd && (
+                      <span className="text-xs text-muted-foreground">· Pausa {p.lunchBreakStart}–{p.lunchBreakEnd}</span>
+                    )}
+                    {mode === 'manual' && (!p.lunchBreakStart || !p.lunchBreakEnd) && (p.defaultBreakMinutes ?? 0) > 0 && (
+                      <span className="text-xs text-muted-foreground">· Pausa {p.defaultBreakMinutes}min</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setDeleteTarget({ id: p.id, name: p.name })} className="text-destructive hover:text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => setDeleteTarget({ id: p.id, name: p.name })} className="text-destructive hover:text-destructive">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

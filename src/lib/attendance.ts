@@ -9,18 +9,27 @@ export const SHIFT_PRESETS: Record<Exclude<ShiftType, 'personalizzato'>, { label
   spezzato:   { label: 'Spezzato (08:00–12:00 / 13:00–17:00)', expectedIn1: '08:00', expectedOut1: '12:00', expectedIn2: '13:00', expectedOut2: '17:00' },
 };
 
+export type TrackingMode = 'auto' | 'manual';
+
 export interface EmployeeProfile {
   id: string;
   name: string;
   shift: ShiftType;
+  /**
+   * 'auto'   = camionisti / smart working: nessun QR. Auto-fill giornaliero
+   *            di 4 timbrature (in1/out1/in2/out2) basato sugli orari del turno.
+   * 'manual' = dipendente standard: timbra con QR. Se nella giornata risultano
+   *            esattamente 2 timbrature viene applicata la detrazione pausa.
+   */
+  trackingMode: TrackingMode;
   expectedIn1: string;  // HH:MM
   expectedOut1: string;
   expectedIn2: string;
   expectedOut2: string;
   weeklyHours?: number; // default 40
-  defaultBreakMinutes?: number; // fallback fisso (minuti) se non è impostata la finestra pausa
-  lunchBreakStart?: string; // HH:MM finestra pausa pranzo
-  lunchBreakEnd?: string;   // HH:MM finestra pausa pranzo
+  defaultBreakMinutes?: number; // detrazione pausa fissa (solo modo 'manual')
+  lunchBreakStart?: string; // HH:MM (solo modo 'manual')
+  lunchBreakEnd?: string;   // HH:MM (solo modo 'manual')
 }
 
 // ── Helpers timezone-safe ──
@@ -99,21 +108,101 @@ export interface AttendanceData {
   projects: Project[];
 }
 
-const STORAGE_KEY = 'attendance_data';
+// ── Persistence layer ──
+//
+// Architettura: cache in memoria sincrona idratata all'avvio da `initData()`
+// (async). Il server Express locale (server.js sulla porta 3001) espone
+// GET/POST /api/data e legge/scrive `database.json` nella root del progetto.
+// localStorage rimane come fallback offline e cache di bootstrap istantanea.
 
-export function loadData(): AttendanceData {
+const STORAGE_KEY = 'attendance_data';
+const API_BASE =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE) ||
+  'http://localhost:3001';
+
+const emptyData = (): AttendanceData => ({ entries: [], leaves: [], employees: [], projects: [] });
+
+let _cache: AttendanceData = emptyData();
+let _initialized = false;
+let _serverAvailable = false;
+let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function _hydrateFromLocal(): AttendanceData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { entries: parsed.entries || [], leaves: parsed.leaves || [], employees: parsed.employees || [], projects: parsed.projects || [] };
+      return {
+        entries: parsed.entries || [],
+        leaves: parsed.leaves || [],
+        employees: parsed.employees || [],
+        projects: parsed.projects || [],
+      };
     }
   } catch {}
-  return { entries: [], leaves: [], employees: [], projects: [] };
+  return emptyData();
+}
+
+/**
+ * Idrata la cache leggendo dal server locale; in caso di errore usa localStorage.
+ * Da chiamare UNA VOLTA all'avvio dell'app (in Index.tsx) prima di renderizzare.
+ */
+export async function initData(): Promise<AttendanceData> {
+  // Bootstrap immediato dalla cache locale
+  _cache = _hydrateFromLocal();
+  try {
+    const res = await fetch(`${API_BASE}/api/data`, { cache: 'no-store' });
+    if (res.ok) {
+      const remote = (await res.json()) as Partial<AttendanceData>;
+      _cache = {
+        entries: remote.entries || [],
+        leaves: remote.leaves || [],
+        employees: remote.employees || [],
+        projects: remote.projects || [],
+      };
+      _serverAvailable = true;
+      // Allinea localStorage per uso offline
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_cache)); } catch {}
+    }
+  } catch {
+    _serverAvailable = false;
+  }
+  _initialized = true;
+  return _cache;
+}
+
+export function isServerAvailable(): boolean {
+  return _serverAvailable;
+}
+
+export function isDataInitialized(): boolean {
+  return _initialized;
+}
+
+export function loadData(): AttendanceData {
+  if (!_initialized) {
+    // Fallback sicuro se qualcuno chiama prima di initData()
+    _cache = _hydrateFromLocal();
+    _initialized = true;
+  }
+  return _cache;
 }
 
 export function saveData(data: AttendanceData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  _cache = data;
+  // Persistenza locale immediata
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+  // Push verso il server con debounce (best-effort)
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    fetch(`${API_BASE}/api/data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+      .then(r => { _serverAvailable = r.ok; })
+      .catch(() => { _serverAvailable = false; });
+  }, 200);
 }
 
 // ── Employee CRUD ──

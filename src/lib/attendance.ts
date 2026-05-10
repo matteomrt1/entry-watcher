@@ -388,9 +388,11 @@ export function calculateHours(
 ): number {
   const data = loadData();
   const profile = data.employees.find(p => p.name === employeeName);
-  const breakMinutes = profile?.defaultBreakMinutes ?? 0;
-  const lunchStart = profile?.lunchBreakStart;
-  const lunchEnd = profile?.lunchBreakEnd;
+  // Detrazione pausa: solo per modalità 'manual' (i record 'auto' sono già completi).
+  const isManual = (profile?.trackingMode ?? 'manual') === 'manual';
+  const breakMinutes = isManual ? (profile?.defaultBreakMinutes ?? 0) : 0;
+  const lunchStart = isManual ? profile?.lunchBreakStart : undefined;
+  const lunchEnd = isManual ? profile?.lunchBreakEnd : undefined;
 
   // Includiamo anche le entries con requiresReview: rappresentano timbrature reali
   // (auto-filled) che vanno comunque conteggiate. Il flag guida solo la UI.

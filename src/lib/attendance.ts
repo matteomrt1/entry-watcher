@@ -358,8 +358,10 @@ export function runReconciliation(): number {
       if (count === 0 || count === 2 || count === 4) continue;
       if (count % 2 === 0) continue;
 
-      // Find employee profile and use last expected out time based on shift
+      // Find employee profile
       const profile = data.employees.find(p => p.name === empName);
+      // Le risorse 'auto' vengono gestite da runAutoFill, non dalla riconciliazione QR.
+      if (profile?.trackingMode === 'auto') continue;
       const fallbackTime = profile?.expectedOut2 || profile?.expectedOut1 || '18:00';
 
       const autoEntry: AttendanceEntry = {
@@ -372,6 +374,66 @@ export function runReconciliation(): number {
       };
       data.entries.push(autoEntry);
       generated++;
+    }
+  }
+
+  if (generated > 0) saveData(data);
+  return generated;
+}
+
+// ── Auto-fill engine (modalità 'auto': camionisti / smart working) ──
+//
+// Per ogni risorsa con trackingMode === 'auto' garantisce 4 timbrature
+// (in1/out1/in2/out2) per ogni giorno feriale dall'ultimo check fino a IERI
+// incluso. Idempotente: salta i giorni con timbrature esistenti e i giorni
+// con assenza registrata (ferie/permesso/malattia).
+//
+// Da chiamare all'avvio dell'app, dopo initData() e prima della
+// renderizzazione dei tab.
+export function runAutoFill(daysBack: number = 14): number {
+  const data = loadData();
+  const autos = data.employees.filter(p => p.trackingMode === 'auto');
+  if (autos.length === 0) return 0;
+
+  let generated = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (const profile of autos) {
+    // Set di date già popolate per questa risorsa (qualsiasi timbratura)
+    const filledDays = new Set<string>();
+    for (const e of data.entries) {
+      if (e.employeeName === profile.name) filledDays.add(localDateKey(e.timestamp));
+    }
+    const leaveDays = new Set<string>();
+    for (const l of data.leaves) {
+      if (l.employeeName === profile.name) leaveDays.add(l.date);
+    }
+
+    for (let i = daysBack; i >= 1; i--) {
+      const day = new Date(today);
+      day.setDate(today.getDate() - i);
+      const dow = day.getDay();
+      if (dow === 0 || dow === 6) continue; // skip weekend
+      const dateStr = localDateKey(day);
+      if (filledDays.has(dateStr) || leaveDays.has(dateStr)) continue;
+
+      const slots: { time: string; type: 'check-in' | 'check-out' }[] = [];
+      if (profile.expectedIn1)  slots.push({ time: profile.expectedIn1,  type: 'check-in'  });
+      if (profile.expectedOut1) slots.push({ time: profile.expectedOut1, type: 'check-out' });
+      if (profile.expectedIn2)  slots.push({ time: profile.expectedIn2,  type: 'check-in'  });
+      if (profile.expectedOut2) slots.push({ time: profile.expectedOut2, type: 'check-out' });
+
+      for (const s of slots) {
+        data.entries.push({
+          id: crypto.randomUUID(),
+          employeeName: profile.name,
+          timestamp: `${dateStr}T${s.time}:00`,
+          type: s.type,
+          isAutoFilled: true,
+        });
+        generated++;
+      }
     }
   }
 

@@ -84,9 +84,12 @@ const Index = () => {
           </div>
           <div className="flex items-center gap-2">
             <DataManager onImport={refresh} />
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-3 py-1.5 rounded-full">
-              <Database className="h-3 w-3" />
-              <span>Locale</span>
+            <div
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full ${serverOk ? 'bg-secondary text-muted-foreground' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'}`}
+              title={serverOk ? 'Connesso al server locale (porta 3001)' : 'Server non raggiungibile — fallback localStorage'}
+            >
+              {serverOk ? <Database className="h-3 w-3" /> : <CloudOff className="h-3 w-3" />}
+              <span>{serverOk ? 'Server OK' : 'Solo locale'}</span>
             </div>
           </div>
         </div>

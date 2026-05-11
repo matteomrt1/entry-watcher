@@ -147,9 +147,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+// IL BLOCCO CRITICO CHE MANCAVA: Forzare 127.0.0.1
+server.listen(PORT, '127.0.0.1', () => {
   console.log('═══════════════════════════════════════════════════════════');
-  console.log(`  📡 Presenze server attivo su http://localhost:${PORT}`);
+  console.log(`  📡 Presenze server attivo in LOCALE PURO: http://127.0.0.1:${PORT}`);
   console.log(`  💾 Database file: ${DB_FILE}`);
   console.log(`  🗂️  Backup dir:   ${BACKUP_DIR}`);
   console.log('═══════════════════════════════════════════════════════════');

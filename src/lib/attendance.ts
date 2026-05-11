@@ -17,9 +17,9 @@ export interface EmployeeProfile {
   shift: ShiftType;
   /**
    * 'auto'   = camionisti / smart working: nessun QR. Auto-fill giornaliero
-   *            di 4 timbrature (in1/out1/in2/out2) basato sugli orari del turno.
+   * di 4 timbrature (in1/out1/in2/out2) basato sugli orari del turno.
    * 'manual' = dipendente standard: timbra con QR. Se nella giornata risultano
-   *            esattamente 2 timbrature viene applicata la detrazione pausa.
+   * esattamente 2 timbrature viene applicata la detrazione pausa.
    */
   trackingMode: TrackingMode;
   expectedIn1: string;  // HH:MM
@@ -121,9 +121,8 @@ export interface AttendanceData {
 //      `isServerAvailable()` diventa false.
 //   4. localStorage NON è più sorgente di verità per i dati di business.
 
-const API_BASE =
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE) ||
-  'http://localhost:3001';
+// Configurazione IP esplicita per bypassare il bug di risoluzione IPv6
+const API_BASE = 'http://127.0.0.1:3001';
 
 const emptyData = (): AttendanceData => ({ entries: [], leaves: [], employees: [], projects: [] });
 

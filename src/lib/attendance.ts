@@ -110,12 +110,17 @@ export interface AttendanceData {
 
 // ── Persistence layer ──
 //
-// Architettura: cache in memoria sincrona idratata all'avvio da `initData()`
-// (async). Il server Express locale (server.js sulla porta 3001) espone
-// GET/POST /api/data e legge/scrive `database.json` nella root del progetto.
-// localStorage rimane come fallback offline e cache di bootstrap istantanea.
+// Architettura 100% offline su file fisico:
+//   1. Il server Node locale (server.js) gira su :3001 e legge/scrive
+//      `database.json` nella root del progetto.
+//   2. All'avvio l'app fa GET /api/data UNA volta e popola una cache in
+//      memoria. Se la chiamata fallisce, `initData()` lancia un'eccezione e
+//      l'UI mostra una schermata di errore (NESSUN fallback localStorage).
+//   3. Ogni `saveData()` esegue immediatamente POST /api/data (no debounce).
+//      In caso di errore l'utente viene notificato via toast e
+//      `isServerAvailable()` diventa false.
+//   4. localStorage NON è più sorgente di verità per i dati di business.
 
-const STORAGE_KEY = 'attendance_data';
 const API_BASE =
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE) ||
   'http://localhost:3001';
@@ -125,48 +130,32 @@ const emptyData = (): AttendanceData => ({ entries: [], leaves: [], employees: [
 let _cache: AttendanceData = emptyData();
 let _initialized = false;
 let _serverAvailable = false;
-let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+let _onSaveError: ((err: Error) => void) | null = null;
 
-function _hydrateFromLocal(): AttendanceData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        entries: parsed.entries || [],
-        leaves: parsed.leaves || [],
-        employees: parsed.employees || [],
-        projects: parsed.projects || [],
-      };
-    }
-  } catch {}
-  return emptyData();
+/** Registra un callback globale invocato quando una scrittura sul server fallisce. */
+export function setSaveErrorHandler(fn: ((err: Error) => void) | null) {
+  _onSaveError = fn;
 }
 
 /**
- * Idrata la cache leggendo dal server locale; in caso di errore usa localStorage.
- * Da chiamare UNA VOLTA all'avvio dell'app (in Index.tsx) prima di renderizzare.
+ * Idrata la cache leggendo dal server locale.
+ * Da chiamare UNA VOLTA all'avvio dell'app (in Index.tsx).
+ * In caso di errore lancia: l'app deve mostrare schermata "Server non in esecuzione".
  */
 export async function initData(): Promise<AttendanceData> {
-  // Bootstrap immediato dalla cache locale
-  _cache = _hydrateFromLocal();
-  try {
-    const res = await fetch(`${API_BASE}/api/data`, { cache: 'no-store' });
-    if (res.ok) {
-      const remote = (await res.json()) as Partial<AttendanceData>;
-      _cache = {
-        entries: remote.entries || [],
-        leaves: remote.leaves || [],
-        employees: remote.employees || [],
-        projects: remote.projects || [],
-      };
-      _serverAvailable = true;
-      // Allinea localStorage per uso offline
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_cache)); } catch {}
-    }
-  } catch {
+  const res = await fetch(`${API_BASE}/api/data`, { cache: 'no-store' });
+  if (!res.ok) {
     _serverAvailable = false;
+    throw new Error(`Server ha risposto con status ${res.status}`);
   }
+  const remote = (await res.json()) as Partial<AttendanceData>;
+  _cache = {
+    entries: remote.entries || [],
+    leaves: remote.leaves || [],
+    employees: remote.employees || [],
+    projects: remote.projects || [],
+  };
+  _serverAvailable = true;
   _initialized = true;
   return _cache;
 }
@@ -180,29 +169,35 @@ export function isDataInitialized(): boolean {
 }
 
 export function loadData(): AttendanceData {
-  if (!_initialized) {
-    // Fallback sicuro se qualcuno chiama prima di initData()
-    _cache = _hydrateFromLocal();
-    _initialized = true;
-  }
   return _cache;
 }
 
+/**
+ * Aggiorna la cache in memoria e posta IMMEDIATAMENTE su database.json
+ * tramite il server locale. Sincrona per non rompere l'interfaccia chiamante,
+ * ma la POST viene avviata subito (no debounce). Errori → callback registrato.
+ */
 export function saveData(data: AttendanceData) {
   _cache = data;
-  // Persistenza locale immediata
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
-  // Push verso il server con debounce (best-effort)
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
-    fetch(`${API_BASE}/api/data`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+  fetch(`${API_BASE}/api/data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+    keepalive: true,
+  })
+    .then(r => {
+      if (!r.ok) {
+        _serverAvailable = false;
+        const err = new Error(`Server status ${r.status}`);
+        _onSaveError?.(err);
+      } else {
+        _serverAvailable = true;
+      }
     })
-      .then(r => { _serverAvailable = r.ok; })
-      .catch(() => { _serverAvailable = false; });
-  }, 200);
+    .catch((err) => {
+      _serverAvailable = false;
+      _onSaveError?.(err instanceof Error ? err : new Error(String(err)));
+    });
 }
 
 // ── Employee CRUD ──

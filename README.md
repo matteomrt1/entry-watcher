@@ -1,73 +1,79 @@
-# Welcome to your Lovable project
+# Sistema Presenze — Persistenza su file fisico
 
-## Project info
+Applicazione 100% offline per il monitoraggio presenze. **Nessun cloud, nessun localStorage**: tutti i dati vivono in `database.json` nella root del progetto.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Architettura
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+┌────────────────────┐    HTTP loopback     ┌──────────────────────┐
+│  Browser / Tablet  │ ── GET /api/data ──► │  server.js (Node)    │
+│  React + Vite      │ ◄──── JSON ───────── │  porta 3001          │
+│                    │ ── POST /api/data ─► │                      │
+└────────────────────┘                      │  legge/scrive        │
+                                            │  ./database.json     │
+                                            │  + backups/ (7gg)    │
+                                            └──────────────────────┘
 ```
 
-**Edit a file directly in GitHub**
+- **Lettura**: all'avvio l'app fa `GET /api/data` UNA volta e popola la cache.
+  Se il server non risponde l'app mostra una schermata di errore esplicita.
+- **Scrittura**: ogni timbratura, modifica risorsa, assenza, ecc. esegue
+  immediatamente `POST /api/data` (no debounce). Il server riscrive
+  `database.json` in modo atomico (`tmp` + `rename`) e crea un backup
+  giornaliero in `./backups/database-YYYY-MM-DD.json`.
+- **Nessun localStorage** per i dati di business. Restano in localStorage solo
+  le preferenze UI (`roundingMinutes`, `gracePeriodMinutes`).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Requisiti
 
-**Use GitHub Codespaces**
+- Node.js ≥ 18 (per `node:fs/promises`, `import.meta`, fetch nativo).
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Avvio in locale (sviluppo)
 
-## What technologies are used for this project?
+```bash
+# 1. Posiziona database.json nella root del progetto (se non esiste viene creato vuoto).
 
-This project is built with:
+# 2. Installa le dipendenze
+npm install
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# 3a. Avvio combinato (server + Vite in un solo terminale)
+npm start
 
-## How can I deploy this project?
+# 3b. Oppure due terminali separati
+npm run server   # terminale 1 → http://localhost:3001
+npm run dev      # terminale 2 → http://localhost:8080
+```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Apri il browser sulla URL stampata da Vite. L'app legge e scrive `database.json`.
 
-## Can I connect a custom domain to my Lovable project?
+## Avvio in produzione su tablet
 
-Yes, you can!
+```bash
+npm run build           # genera dist/
+npm run server          # avvia il backend
+# poi servi dist/ con un qualunque static server (npx serve dist, nginx, ecc.)
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Per l'app pubblicata, configura `VITE_API_BASE` se il server non è su `localhost:3001`.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## File chiave
+
+| File | Scopo |
+|---|---|
+| `server.js` | Server Node (zero dipendenze npm) per leggere/scrivere `database.json` |
+| `database.json` | **Unica sorgente di verità.** Va versionato/copiato a mano sul tablet |
+| `backups/` | Backup giornalieri rotanti (ultimi 7 giorni) |
+| `src/lib/attendance.ts` | Layer di accesso dati lato React |
+
+## Backup manuale aggiuntivo
+
+Dalla UI, il pulsante **Esporta JSON** in `DataManager` scarica una copia
+istantanea dei dati come secondo livello di backup.
+
+## Variabili d'ambiente
+
+- `PORT` (server) — porta di ascolto (default `3001`)
+- `DB_FILE` (server) — path al file database (default `./database.json`)
+- `VITE_API_BASE` (frontend) — URL del server (default `http://localhost:3001`)
+
+Vedi `.env.example`.

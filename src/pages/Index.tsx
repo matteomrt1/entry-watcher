@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor, Wallet, Briefcase, Loader2, CloudOff } from 'lucide-react';
-import { runReconciliation, runAutoFill, initData, isServerAvailable } from '@/lib/attendance';
+import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor, Wallet, Briefcase, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { runReconciliation, runAutoFill, initData, isServerAvailable, setSaveErrorHandler } from '@/lib/attendance';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import QRScanner from '@/components/QRScanner';
 import AttendanceLog from '@/components/AttendanceLog';
 import LeaveManager from '@/components/LeaveManager';
@@ -33,28 +34,43 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [bootError, setBootError] = useState<string | null>(null);
   const [serverOk, setServerOk] = useState(false);
   const bootDone = useRef(false);
 
   const refresh = () => setRefreshKey(k => k + 1);
 
-  useEffect(() => {
-    if (bootDone.current) return;
-    bootDone.current = true;
-    (async () => {
+  const boot = async () => {
+    setLoading(true);
+    setBootError(null);
+    try {
       await initData();
-      const ok = isServerAvailable();
-      setServerOk(ok);
-      if (!ok) {
-        toast.warning('Server locale non raggiungibile (porta 3001) — uso storage browser come fallback');
-      }
+      setServerOk(isServerAvailable());
       const filled = runAutoFill();
       if (filled > 0) toast.info(`Autocompilazione: generate ${filled} timbrature per risorse automatiche`);
       const recon = runReconciliation();
       if (recon > 0) toast.info(`Riconciliazione: ${recon} uscita/e mancante/i generate`);
-      setLoading(false);
       refresh();
-    })();
+    } catch (err) {
+      setServerOk(false);
+      setBootError(err instanceof Error ? err.message : 'Errore sconosciuto');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (bootDone.current) return;
+    bootDone.current = true;
+    setSaveErrorHandler((err) => {
+      setServerOk(false);
+      toast.error(`Salvataggio su database.json fallito: ${err.message}`, {
+        description: 'Riavvia il server: node server.js',
+        duration: 8000,
+      });
+    });
+    boot();
+    return () => setSaveErrorHandler(null);
   }, []);
 
   if (loading) {
@@ -62,7 +78,33 @@ const Index = () => {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm">Caricamento dati dal server locale…</p>
+          <p className="text-sm">Lettura di database.json dal server locale…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (bootError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-lg w-full rounded-xl border border-destructive/40 bg-destructive/5 p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-6 w-6 text-destructive" />
+            <h1 className="text-lg font-bold">Server locale non in esecuzione</h1>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            L'applicazione non riesce a leggere <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">database.json</code> perché il server di persistenza non risponde su <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">http://localhost:3001</code>.
+          </p>
+          <div className="rounded-md bg-card border p-3 text-xs font-mono space-y-1">
+            <p className="text-muted-foreground"># Apri un terminale nella cartella del progetto:</p>
+            <p>node server.js</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Dettaglio errore: <span className="font-mono">{bootError}</span>
+          </p>
+          <Button onClick={boot} className="w-full gap-2">
+            <RefreshCw className="h-4 w-4" /> Riprova
+          </Button>
         </div>
       </div>
     );
@@ -85,11 +127,11 @@ const Index = () => {
           <div className="flex items-center gap-2">
             <DataManager onImport={refresh} />
             <div
-              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full ${serverOk ? 'bg-secondary text-muted-foreground' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'}`}
-              title={serverOk ? 'Connesso al server locale (porta 3001)' : 'Server non raggiungibile — fallback localStorage'}
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full ${serverOk ? 'bg-accent/15 text-accent' : 'bg-destructive/15 text-destructive'}`}
+              title={serverOk ? 'Connesso a database.json (porta 3001)' : 'Server NON raggiungibile — le modifiche non vengono salvate'}
             >
-              {serverOk ? <Database className="h-3 w-3" /> : <CloudOff className="h-3 w-3" />}
-              <span>{serverOk ? 'Server OK' : 'Solo locale'}</span>
+              {serverOk ? <Database className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+              <span>{serverOk ? 'database.json OK' : 'Server OFFLINE'}</span>
             </div>
           </div>
         </div>

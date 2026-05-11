@@ -121,9 +121,6 @@ export interface AttendanceData {
 //      `isServerAvailable()` diventa false.
 //   4. localStorage NON è più sorgente di verità per i dati di business.
 
-// Configurazione IP esplicita per bypassare il bug di risoluzione IPv6
-const API_BASE = 'http://127.0.0.1:3001';
-
 const emptyData = (): AttendanceData => ({ entries: [], leaves: [], employees: [], projects: [] });
 
 let _cache: AttendanceData = emptyData();
@@ -142,7 +139,7 @@ export function setSaveErrorHandler(fn: ((err: Error) => void) | null) {
  * In caso di errore lancia: l'app deve mostrare schermata "Server non in esecuzione".
  */
 export async function initData(): Promise<AttendanceData> {
-  const res = await fetch(`${API_BASE}/api/data`, { cache: 'no-store' });
+  const res = await fetch('/api/data', { cache: 'no-store' });
   if (!res.ok) {
     _serverAvailable = false;
     throw new Error(`Server ha risposto con status ${res.status}`);
@@ -178,7 +175,7 @@ export function loadData(): AttendanceData {
  */
 export function saveData(data: AttendanceData) {
   _cache = data;
-  fetch(`${API_BASE}/api/data`, {
+  fetch('/api/data', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),

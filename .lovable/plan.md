@@ -1,72 +1,77 @@
 ## Obiettivo
+Eliminare alla radice il problema "Server OFFLINE" rendendo l'app **single-origin**: un solo processo Node serve sia le API (`/api/data`) sia i file statici dell'app buildata. Niente Vite in produzione, niente proxy, niente conflitti IPv4/IPv6, niente CORS.
 
-Eliminare completamente `localStorage` come sorgente dati. L'unica sorgente di verità diventa il file fisico `database.json` letto/scritto dal server Node locale (`server.js`, porta 3001). Se il server non risponde, l'app si blocca con errore esplicito invece di degradare silenziosamente sul browser.
+## Cause del problema attuale
+1. **Origin diverso**: quando il tablet apre l'URL pubblicato Lovable (o un host diverso da `localhost:8080`), `fetch('/api/data')` colpisce quel server, non `127.0.0.1:3001`. Riceve `index.html` → errore `Unexpected token '<'`.
+2. **Due processi accoppiati**: Vite (8080) + Node (3001) richiedono il proxy attivo. Una porta occupata o un crash → tutto rotto.
+3. **`crypto.randomUUID`**: richiede HTTPS o `localhost`. Su IP di rete (`192.168.x.x`) in HTTP fallisce. Va sostituito con un fallback robusto **una volta sola**, in un helper centrale.
 
-## Architettura finale
+## Architettura target
 
 ```text
-┌────────────────────┐    HTTP (loopback)    ┌──────────────────────┐
-│  Browser / Tablet  │ ───── GET /api/data ─►│  server.js (Node)    │
-│  React (Vite dev   │ ◄──── JSON  ───────── │  Express minimale    │
-│  o build statica)  │                       │  porta 3001          │
-│                    │ ───── POST /api/data ►│                      │
-└────────────────────┘                       │  legge/scrive        │
-                                             │  ./database.json     │
-                                             │  + backup giornalieri│
-                                             └──────────────────────┘
+                      ┌─────────────────────────────────┐
+   Tablet/Browser ──► │  server.js  (porta 3001)        │
+                      │  • GET /api/data  → database.json│
+                      │  • POST /api/data → scrive file  │
+                      │  • GET /*  → serve dist/ (SPA)   │
+                      └─────────────────────────────────┘
+                                    │
+                                    ▼
+                              database.json
+                              backups/*.json
 ```
 
-- `database.json` vive nella root del progetto (stessa cartella di `package.json`).
-- All'avvio l'app fa **solo** `GET /api/data`. Se fallisce → schermata di errore "Server locale non avviato", nessun fallback browser.
-- Ogni mutazione (timbratura QR, manuale, CRUD dipendenti/progetti, assenze, riconciliazione, autofill) chiama `POST /api/data` **e attende la conferma** prima di considerare l'operazione completata.
-- Backup automatici rotanti in `./backups/database-YYYY-MM-DD.json` (mantieni 7 giorni) per sicurezza.
-- L'export JSON manuale dal `DataManager` resta come backup aggiuntivo scaricabile.
+Un solo URL da aprire sul tablet: `http://<ip-pc>:3001/`. Stesso origin per app e API → `fetch('/api/data')` funziona sempre.
 
-## Cosa cambia nel codice
+## Modifiche
 
-### 1. `server.js` (root del progetto, nuovo / aggiornato)
-Script Node puro (zero dipendenze npm, usa `node:http` + `node:fs`):
-- `GET /api/data` → restituisce contenuto di `database.json` (crea file vuoto se assente).
-- `POST /api/data` → valida JSON, scrittura atomica (`tmp` + `rename`), crea backup giornaliero.
-- CORS aperto su `http://localhost:*` per il dev server Vite.
-- Avvio: `node server.js` (oppure script npm dedicato).
+### 1. `server.js` — diventa anche static file server
+- Aggiungere serving della cartella `dist/` con corretto `Content-Type` per `.js / .css / .html / .svg / .png / .ico / .woff2`.
+- SPA fallback: qualunque GET non-API e senza estensione → restituisce `dist/index.html`.
+- Mantenere `/api/health`, `/api/data` GET/POST, scrittura atomica e backup giornalieri.
+- Continuare ad ascoltare su `0.0.0.0` (così il tablet sulla rete locale può connettersi), non solo `127.0.0.1`.
 
-### 2. `src/lib/attendance.ts` (refactor profondo)
-- **Rimuovere**: `STORAGE_KEY`, `_hydrateFromLocal`, ogni `localStorage.getItem/setItem` collegato ai dati (mantengo `loadSettings/saveSettings` su localStorage perché sono preferenze UI, non dati di business — confermare con utente).
-- `initData()` async: solo `fetch(GET)`. In caso di errore lancia eccezione → l'app mostra schermata di errore.
-- `loadData()` resta sincrona ma legge solo dalla cache in memoria (idratata da `initData`).
-- `saveData()` diventa **async** e attende la `POST`. Rimosso debounce di 200ms (ogni timbratura deve essere persistita subito; con un tablet la latenza loopback è < 5ms).
-- Tutte le funzioni CRUD (`addEntry`, `updateEntry`, `deleteEntry`, `addEmployee`, `updateEmployee`, `deleteEmployee`, `addLeave`, `removeLeave`, `addProject`, `toggleProjectStatus`, `runReconciliation`, `runAutoFill`, `importJSON`) diventano `async` e fanno `await saveData(...)`.
+### 2. `src/lib/uid.ts` (nuovo)
+- Helper `newId()` che usa `crypto.randomUUID()` se disponibile, altrimenti fallback `crypto.getRandomValues` + timestamp. Sostituire tutte le occorrenze di `crypto.randomUUID()` nel codice con `newId()`.
 
-### 3. Componenti consumer
-Aggiornati per `await` le funzioni CRUD ora asincrone:
-- `QRScanner.tsx`, `AttendanceLog.tsx`, `EmployeeManager.tsx`, `LeaveManager.tsx`, `ProjectManager.tsx`, `DataManager.tsx`, `ReviewPanel.tsx`, `Index.tsx` (boot).
-- Stato di errore globale in `Index.tsx`: se `initData()` fallisce mostra una card "Server locale non in esecuzione" con istruzioni per avviarlo.
+### 3. `src/lib/attendance.ts`
+- Lasciare `fetch('/api/data')` relativo (già corretto): in single-origin non serve `VITE_API_BASE`.
+- Rendere `VITE_API_BASE` opzionale con default `''` (relative).
+- Sostituire `crypto.randomUUID()` con `newId()`.
 
-### 4. `package.json` (script di comodità)
-Aggiungere:
-- `"server": "node server.js"`
-- `"start": "concurrently \"npm run server\" \"npm run dev\""` (richiede `concurrently` come devDep — opzionale, in alternativa istruzioni per due terminali).
+### 4. `package.json` — script semplificati
+```json
+{
+  "scripts": {
+    "dev":   "vite",                          // solo per sviluppo Lovable
+    "server": "node server.js",
+    "build": "vite build",
+    "start": "npm run build && node server.js" // produzione tablet: un solo comando
+  }
+}
+```
+Rimuovere `concurrently` (non più necessario in produzione). Resta utile solo se si vuole sviluppare con HMR contemporaneamente al server: in quel caso usare `npm run dev` + `npm run server` in due terminali, il proxy Vite verso 3001 resta nel `vite.config.ts`.
 
-### 5. Configurazione endpoint
-- Variabile `VITE_API_BASE` già supportata (default `http://localhost:3001`). Documentata in `.env.example`.
+### 5. `vite.config.ts`
+- Mantenere il proxy `/api → 127.0.0.1:3001` per lo sviluppo HMR. Nessuna modifica.
 
-## Migrazione del file fornito
+### 6. `README.md`
+Aggiornare la sezione "Avvio sul tablet":
+```bash
+npm install
+npm start                # builda e avvia il server unico
+# poi sul tablet apri:  http://<ip-del-pc>:3001/
+```
+Per sapere l'IP del PC: `ipconfig` (Windows) → cerca "IPv4". Aprire la porta 3001 sul firewall Windows se richiesto.
 
-Il `database.json` allegato (≈7260 righe) viene **copiato così com'è** nella root del progetto come stato iniziale. Al primo avvio il server lo legge e lo serve all'app.
+## Cosa NON cambia
+- Logica di business (timbrature, calcoli ore, riconciliazione, autofill).
+- Schema `database.json`.
+- UI e componenti React.
+- Backup giornalieri rotanti.
+- Pulsante "Esporta JSON" come backup manuale.
 
-## Istruzioni operative per l'utente
-
-1. Posizionare `database.json` nella cartella root del progetto.
-2. Aprire un terminale: `node server.js` → server attivo su `http://localhost:3001`.
-3. In un secondo terminale: `npm run dev` (o, se aggiungiamo lo script combinato, solo `npm start`).
-4. Aprire il tablet sul preview Vite. L'app legge/scrive su `database.json`.
-5. Per la build di produzione locale: `npm run build` + un piccolo static server, sempre con `node server.js` in parallelo.
-
-## Punti da confermare prima di implementare
-
-1. **Settings UI** (`roundingMinutes`, `gracePeriodMinutes`): le sposto anche su `database.json` o restano su localStorage del browser? (Sono 2 numeri, non dati di business.)
-2. **Comportamento se il server cade durante l'uso**: blocco l'azione con toast di errore e la respingo (nessuna scrittura locale di sicurezza)? Oppure metto in coda le operazioni e ritento?
-3. **Scrittura intera vs incrementale**: ogni `POST` invia l'intero database (semplice, attuale). Va bene anche con i 7000+ record attuali, oppure preferisci endpoint granulari (`POST /api/entries`, ecc.) per ridurre il payload?
-
-Una volta confermati questi tre punti procedo con l'implementazione.
+## Risultato
+- Un solo processo, un solo URL, un solo origin.
+- Niente più `Failed to fetch`, niente `Unexpected token '<'`, niente `crypto.randomUUID is not a function`.
+- Il tablet apre `http://<ip-pc>:3001/` e funziona anche se il PC viene riavviato (basta ri-eseguire `npm start`, oppure registrare il comando come servizio Windows in un secondo momento).

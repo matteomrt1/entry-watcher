@@ -128,10 +128,22 @@ let _cache: AttendanceData = emptyData();
 let _initialized = false;
 let _serverAvailable = false;
 let _onSaveError: ((err: Error) => void) | null = null;
+let _onServerStatusChange: ((available: boolean) => void) | null = null;
+let _pendingSave: Promise<void> = Promise.resolve();
+
+function setServerAvailable(next: boolean) {
+  _serverAvailable = next;
+  _onServerStatusChange?.(next);
+}
 
 /** Registra un callback globale invocato quando una scrittura sul server fallisce. */
 export function setSaveErrorHandler(fn: ((err: Error) => void) | null) {
   _onSaveError = fn;
+}
+
+/** Registra un callback globale invocato quando cambia lo stato della connessione al server. */
+export function setServerStatusHandler(fn: ((available: boolean) => void) | null) {
+  _onServerStatusChange = fn;
 }
 
 /**
@@ -144,19 +156,19 @@ export async function initData(): Promise<AttendanceData> {
   try {
     res = await fetch('/api/data', { cache: 'no-store', headers: { 'Accept': 'application/json' } });
   } catch (err) {
-    _serverAvailable = false;
+    setServerAvailable(false);
     throw new Error(
       `Impossibile contattare il server locale (${err instanceof Error ? err.message : 'rete non disponibile'}). ` +
       `Assicurati di aprire l'app dall'URL del server (http://<ip>:3001/), non dal sito Lovable pubblicato.`
     );
   }
   if (!res.ok) {
-    _serverAvailable = false;
+    setServerAvailable(false);
     throw new Error(`Server ha risposto con status ${res.status}`);
   }
   const ct = res.headers.get('content-type') || '';
   if (!ct.includes('json')) {
-    _serverAvailable = false;
+    setServerAvailable(false);
     throw new Error(
       `La risposta di /api/data non è JSON (content-type: ${ct || 'sconosciuto'}). ` +
       `Stai probabilmente aprendo il frontend da un origin diverso dal server (es. URL Lovable). ` +
@@ -170,7 +182,7 @@ export async function initData(): Promise<AttendanceData> {
     employees: remote.employees || [],
     projects: remote.projects || [],
   };
-  _serverAvailable = true;
+  setServerAvailable(true);
   _initialized = true;
   return _cache;
 }
@@ -194,25 +206,26 @@ export function loadData(): AttendanceData {
  */
 export function saveData(data: AttendanceData) {
   _cache = data;
-  fetch('/api/data', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-    keepalive: true,
-  })
-    .then(r => {
+  const payload = JSON.stringify(data);
+
+  _pendingSave = _pendingSave.catch(() => undefined).then(async () => {
+    try {
+      const r = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: payload,
+        cache: 'no-store',
+      });
       if (!r.ok) {
-        _serverAvailable = false;
-        const err = new Error(`Server status ${r.status}`);
-        _onSaveError?.(err);
+        throw new Error(`Server status ${r.status}`);
       } else {
-        _serverAvailable = true;
+        setServerAvailable(true);
       }
-    })
-    .catch((err) => {
-      _serverAvailable = false;
+    } catch (err) {
+      setServerAvailable(false);
       _onSaveError?.(err instanceof Error ? err : new Error(String(err)));
-    });
+    }
+  });
 }
 
 // ── Employee CRUD ──

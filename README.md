@@ -35,13 +35,21 @@ npm install        # solo la prima volta
 npm start          # builda l'app e avvia il server unico
 ```
 
+Su Windows puoi usare direttamente:
+
+```cmd
+start-presenze-windows.cmd
+```
+
+Se lo esegui come **Amministratore**, lo script prova anche ad aprire automaticamente il firewall Windows sulla porta `3001`.
+
 `npm start` esegue `vite build && node server.js`. Sul tablet apri:
 
 ```
 http://<ip-del-pc>:3001/
 ```
 
-Per scoprire l'IP del PC: `ipconfig` (Windows) → cerca **IPv4**. Apri la porta **3001** in entrata sul firewall Windows se richiesto.
+Il server stampa in console gli URL LAN rilevati, ad esempio `http://192.168.1.216:3001/`. Se da tablet l'URL va in timeout ma `http://localhost:3001/` funziona sul PC, il problema è il firewall Windows: apri la porta **3001 TCP in ingresso** o avvia `start-presenze-windows.cmd` come Amministratore.
 
 > **Nota**: apri SEMPRE l'app dall'URL del server (`:3001`). Se la apri dal sito Lovable pubblicato non potrà raggiungere il `database.json` locale.
 
@@ -98,3 +106,11 @@ netstat -ano | findstr :3001
 taskkill /PID <pid> /F
 ```
 Oppure cambia porta: `set PORT=3002 && npm start`.
+
+**`localhost:3001` funziona ma `http://192.168.x.x:3001/` va in timeout**
+Il server è attivo, ma Windows blocca le connessioni dalla rete locale.
+Apri PowerShell o Prompt come Amministratore nella cartella del progetto ed esegui:
+```cmd
+netsh advfirewall firewall add rule name="Presenze Offline 3001" dir=in action=allow protocol=TCP localport=3001
+```
+Poi riavvia `npm start` e apri l'URL LAN stampato dal server.

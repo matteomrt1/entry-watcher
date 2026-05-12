@@ -1,4 +1,5 @@
 // Types and storage utilities for attendance tracking
+import { newId } from "./uid";
 
 export type ShiftType = 'mattina' | 'pomeriggio' | 'notte' | 'spezzato' | 'personalizzato';
 

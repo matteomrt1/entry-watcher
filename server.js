@@ -235,13 +235,28 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  const lanUrls = getLanUrls(PORT);
   console.log('═══════════════════════════════════════════════════════════');
   console.log(`  📡 Presenze server attivo: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   if (HOST === '0.0.0.0') {
-    console.log(`     (raggiungibile da altri dispositivi sulla rete locale)`);
+    console.log(`     URL LAN rilevati: ${lanUrls.length ? lanUrls.join('  ') : 'nessun IPv4 LAN trovato'}`);
+    console.log(`     Se l'URL LAN va in timeout: apri il firewall Windows sulla porta ${PORT}`);
   }
   console.log(`  💾 Database file: ${DB_FILE}`);
   console.log(`  🗂️  Backup dir:   ${BACKUP_DIR}`);
   console.log(`  🌐 SPA dist:     ${distAvailable ? DIST_DIR : '⚠️  non trovata (esegui: npm run build)'}`);
   console.log('═══════════════════════════════════════════════════════════');
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n[server] ERRORE: la porta ${PORT} è già occupata.`);
+    console.error(`[server] Chiudi il vecchio processo Node oppure usa: set PORT=3002 && npm start\n`);
+    process.exit(1);
+  }
+  if (err.code === 'EACCES') {
+    console.error(`\n[server] ERRORE: permesso negato sulla porta ${PORT}. Avvia il terminale come amministratore o cambia porta.\n`);
+    process.exit(1);
+  }
+  throw err;
 });

@@ -1,79 +1,100 @@
-# Sistema Presenze — Persistenza su file fisico
+# Sistema Presenze — 100% offline, single-origin
 
-Applicazione 100% offline per il monitoraggio presenze. **Nessun cloud, nessun localStorage**: tutti i dati vivono in `database.json` nella root del progetto.
+App di monitoraggio presenze con persistenza su file fisico `database.json`.
+**Un solo processo Node** serve sia le API sia l'interfaccia React buildata: niente cloud, niente localStorage per i dati di business, niente Vite in produzione, niente CORS.
 
 ## Architettura
 
 ```
-┌────────────────────┐    HTTP loopback     ┌──────────────────────┐
-│  Browser / Tablet  │ ── GET /api/data ──► │  server.js (Node)    │
-│  React + Vite      │ ◄──── JSON ───────── │  porta 3001          │
-│                    │ ── POST /api/data ─► │                      │
-└────────────────────┘                      │  legge/scrive        │
-                                            │  ./database.json     │
-                                            │  + backups/ (7gg)    │
-                                            └──────────────────────┘
+┌────────────────────────┐
+│  Tablet / Browser      │
+│  http://<ip-pc>:3001/  │
+└────────────┬───────────┘
+             │ stesso origin → niente CORS, niente proxy
+             ▼
+┌────────────────────────────────────────────┐
+│  server.js  (Node ≥18, zero dipendenze)    │
+│  • GET  /api/data     → database.json      │
+│  • POST /api/data     → scrive (atomico)   │
+│  • GET  /<asset>      → ./dist (SPA)       │
+│  • GET  /<route>      → ./dist/index.html  │
+└────────────────────────────────────────────┘
+                │
+                ▼
+        database.json + backups/*.json (7 giorni)
 ```
-
-- **Lettura**: all'avvio l'app fa `GET /api/data` UNA volta e popola la cache.
-  Se il server non risponde l'app mostra una schermata di errore esplicita.
-- **Scrittura**: ogni timbratura, modifica risorsa, assenza, ecc. esegue
-  immediatamente `POST /api/data` (no debounce). Il server riscrive
-  `database.json` in modo atomico (`tmp` + `rename`) e crea un backup
-  giornaliero in `./backups/database-YYYY-MM-DD.json`.
-- **Nessun localStorage** per i dati di business. Restano in localStorage solo
-  le preferenze UI (`roundingMinutes`, `gracePeriodMinutes`).
 
 ## Requisiti
 
-- Node.js ≥ 18 (per `node:fs/promises`, `import.meta`, fetch nativo).
+- Node.js ≥ 18
 
-## Avvio in locale (sviluppo)
-
-```bash
-# 1. Posiziona database.json nella root del progetto (se non esiste viene creato vuoto).
-
-# 2. Installa le dipendenze
-npm install
-
-# 3a. Avvio combinato (server + Vite in un solo terminale)
-npm start
-
-# 3b. Oppure due terminali separati
-npm run server   # terminale 1 → http://localhost:3001
-npm run dev      # terminale 2 → http://localhost:8080
-```
-
-Apri il browser sulla URL stampata da Vite. L'app legge e scrive `database.json`.
-
-## Avvio in produzione su tablet
+## Avvio sul tablet aziendale (produzione)
 
 ```bash
-npm run build           # genera dist/
-npm run server          # avvia il backend
-# poi servi dist/ con un qualunque static server (npx serve dist, nginx, ecc.)
+npm install        # solo la prima volta
+npm start          # builda l'app e avvia il server unico
 ```
 
-Per l'app pubblicata, configura `VITE_API_BASE` se il server non è su `localhost:3001`.
+`npm start` esegue `vite build && node server.js`. Sul tablet apri:
+
+```
+http://<ip-del-pc>:3001/
+```
+
+Per scoprire l'IP del PC: `ipconfig` (Windows) → cerca **IPv4**. Apri la porta **3001** in entrata sul firewall Windows se richiesto.
+
+> **Nota**: apri SEMPRE l'app dall'URL del server (`:3001`). Se la apri dal sito Lovable pubblicato non potrà raggiungere il `database.json` locale.
+
+## Sviluppo (con HMR di Vite)
+
+In due terminali separati:
+
+```bash
+npm run server     # terminale 1 → http://localhost:3001
+npm run dev        # terminale 2 → http://localhost:8080 (con HMR)
+```
+
+Oppure uno solo:
+
+```bash
+npm run dev:all    # concurrently: server + vite insieme
+```
+
+In sviluppo Vite ha un proxy `/api → 127.0.0.1:3001`, quindi anche aprendo `http://localhost:8080` le chiamate raggiungono il server di persistenza.
 
 ## File chiave
 
 | File | Scopo |
 |---|---|
-| `server.js` | Server Node (zero dipendenze npm) per leggere/scrivere `database.json` |
-| `database.json` | **Unica sorgente di verità.** Va versionato/copiato a mano sul tablet |
+| `server.js` | Server Node unico (API + static SPA) |
+| `database.json` | **Unica sorgente di verità.** Da copiare a mano sul tablet |
 | `backups/` | Backup giornalieri rotanti (ultimi 7 giorni) |
-| `src/lib/attendance.ts` | Layer di accesso dati lato React |
+| `src/lib/attendance.ts` | Layer dati lato React (`fetch /api/data`) |
+| `src/lib/uid.ts` | Generatore ID con fallback (per HTTP su IP di rete) |
 
 ## Backup manuale aggiuntivo
 
-Dalla UI, il pulsante **Esporta JSON** in `DataManager` scarica una copia
-istantanea dei dati come secondo livello di backup.
+Dalla UI, **Esporta JSON** in `DataManager` scarica una copia istantanea come secondo livello di backup.
 
 ## Variabili d'ambiente
 
-- `PORT` (server) — porta di ascolto (default `3001`)
-- `DB_FILE` (server) — path al file database (default `./database.json`)
-- `VITE_API_BASE` (frontend) — URL del server (default `http://localhost:3001`)
+- `PORT` — porta del server (default `3001`)
+- `HOST` — interfaccia di ascolto (default `0.0.0.0`, raggiungibile dalla LAN)
+- `DB_FILE` — path al file database (default `./database.json`)
 
-Vedi `.env.example`.
+## Risoluzione problemi
+
+**"Server OFFLINE" / errore `Unexpected token '<'`**
+Hai aperto l'app da un origin diverso dal server (es. URL Lovable pubblicato).
+→ Apri `http://<ip-pc>:3001/`.
+
+**"crypto.randomUUID is not a function"**
+Risolto: ora `src/lib/uid.ts` fornisce un fallback compatibile con HTTP su IP di rete.
+
+**Porta 3001 occupata (`EADDRINUSE`)**
+Un'istanza precedente è ancora in esecuzione. Su Windows:
+```cmd
+netstat -ano | findstr :3001
+taskkill /PID <pid> /F
+```
+Oppure cambia porta: `set PORT=3002 && npm start`.

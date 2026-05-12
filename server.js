@@ -1,13 +1,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// server.js — Server locale per persistenza presenze su file fisico.
+// server.js — Server locale UNICO per persistenza + serving SPA.
 //
-// Avvio:    node server.js
+// Avvio:    node server.js   (oppure: npm start = build + node server.js)
 // Porta:    3001 (override con env PORT)
-// File:     ./database.json (override con env DB_FILE)
+// File DB:  ./database.json (override con env DB_FILE)
 // Backup:   ./backups/database-YYYY-MM-DD.json (rotazione 7 giorni)
 //
-// Nessuna dipendenza npm: usa solo i moduli core di Node.js (>=18).
-// CORS aperto su tutti gli origin di localhost (dev Vite + tablet locali).
+// Architettura SINGLE-ORIGIN:
+//   • GET  /api/health           → stato server
+//   • GET  /api/data             → contenuto database.json
+//   • POST /api/data             → riscrive database.json (atomico) + backup
+//   • GET  /<asset>              → file statico da ./dist
+//   • GET  /<route SPA>          → fallback su ./dist/index.html
+//
+// Sul tablet basta aprire:  http://<ip-del-pc>:3001/
+// Niente CORS, niente proxy, niente IPv4 vs IPv6, niente Vite in produzione.
+//
+// Nessuna dipendenza npm: solo moduli core di Node.js (>= 18).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import http from 'node:http';
@@ -18,14 +27,16 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PORT      = parseInt(process.env.PORT || '3001', 10);
-const DB_FILE   = path.resolve(__dirname, process.env.DB_FILE || 'database.json');
+const PORT       = parseInt(process.env.PORT || '3001', 10);
+const HOST       = process.env.HOST || '0.0.0.0';
+const DB_FILE    = path.resolve(__dirname, process.env.DB_FILE || 'database.json');
 const BACKUP_DIR = path.resolve(__dirname, 'backups');
+const DIST_DIR   = path.resolve(__dirname, 'dist');
 const BACKUP_DAYS = 7;
 
 const EMPTY_DB = { entries: [], leaves: [], employees: [], projects: [] };
 
-// ── Bootstrap: se database.json non esiste lo creiamo vuoto ─────────────────
+// ── Bootstrap ───────────────────────────────────────────────────────────────
 if (!fs.existsSync(DB_FILE)) {
   fs.writeFileSync(DB_FILE, JSON.stringify(EMPTY_DB, null, 2), 'utf8');
   console.log(`[server] Creato database vuoto: ${DB_FILE}`);
@@ -34,13 +45,12 @@ if (!fs.existsSync(BACKUP_DIR)) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 }
 
+const distAvailable = fs.existsSync(path.join(DIST_DIR, 'index.html'));
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function todayStr() {
   const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 async function rotateBackups() {
@@ -62,8 +72,6 @@ async function writeAtomic(payload) {
   const tmp = DB_FILE + '.tmp';
   await fsp.writeFile(tmp, payload, 'utf8');
   await fsp.rename(tmp, DB_FILE);
-
-  // Backup giornaliero (sovrascrive se già esiste oggi)
   const backupFile = path.join(BACKUP_DIR, `database-${todayStr()}.json`);
   await fsp.writeFile(backupFile, payload, 'utf8');
   rotateBackups();
@@ -73,11 +81,10 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
 }
 
 function send(res, status, body, contentType = 'application/json') {
-  res.writeHead(status, { 'Content-Type': contentType });
+  res.writeHead(status, { 'Content-Type': contentType, 'Cache-Control': 'no-store' });
   res.end(body);
 }
 
@@ -95,22 +102,85 @@ function readBody(req, maxBytes = 50 * 1024 * 1024) {
   });
 }
 
-// ── Router minimale ─────────────────────────────────────────────────────────
-const server = http.createServer(async (req, res) => {
-  setCors(res);
+// ── Static serving (SPA) ────────────────────────────────────────────────────
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.mjs':  'application/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg':  'image/svg+xml',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif':  'image/gif',
+  '.webp': 'image/webp',
+  '.ico':  'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2':'font/woff2',
+  '.ttf':  'font/ttf',
+  '.txt':  'text/plain; charset=utf-8',
+  '.map':  'application/json; charset=utf-8',
+};
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204); res.end(); return;
+async function serveStatic(req, res) {
+  if (!distAvailable) {
+    return send(res, 503,
+      `<!doctype html><meta charset="utf-8"><title>Build mancante</title>
+       <body style="font-family:system-ui;padding:2rem;max-width:640px;margin:auto">
+       <h1>⚠️ Cartella <code>dist/</code> non trovata</h1>
+       <p>Esegui prima la build dell'app:</p>
+       <pre style="background:#f4f4f4;padding:1rem;border-radius:6px">npm run build</pre>
+       <p>Poi riavvia il server, oppure usa <code>npm start</code> che fa entrambi.</p>
+       <p>In alternativa, in sviluppo apri Vite su <code>http://localhost:8080/</code>.</p>
+       </body>`,
+      'text/html; charset=utf-8'
+    );
+  }
+
+  const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  // Risolvi e proteggi da path traversal
+  let filePath = path.join(DIST_DIR, urlPath);
+  if (!filePath.startsWith(DIST_DIR)) {
+    return send(res, 403, 'Forbidden', 'text/plain');
   }
 
   try {
+    const stat = await fsp.stat(filePath);
+    if (stat.isDirectory()) filePath = path.join(filePath, 'index.html');
+  } catch {
+    // Non esiste: SPA fallback su index.html (per route client-side)
+    filePath = path.join(DIST_DIR, 'index.html');
+  }
+
+  try {
+    const data = await fsp.readFile(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const ct = MIME[ext] || 'application/octet-stream';
+    const isHtml = ext === '.html';
+    res.writeHead(200, {
+      'Content-Type': ct,
+      'Cache-Control': isHtml ? 'no-store' : 'public, max-age=3600',
+    });
+    res.end(data);
+  } catch (err) {
+    send(res, 500, `Errore lettura file: ${err.message}`, 'text/plain');
+  }
+}
+
+// ── Router ──────────────────────────────────────────────────────────────────
+const server = http.createServer(async (req, res) => {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  try {
     if (req.url === '/api/health' && req.method === 'GET') {
-      return send(res, 200, JSON.stringify({ ok: true, db: DB_FILE }));
+      return send(res, 200, JSON.stringify({ ok: true, db: DB_FILE, distAvailable }));
     }
 
     if (req.url === '/api/data' && req.method === 'GET') {
       const raw = await fsp.readFile(DB_FILE, 'utf8');
-      // Validazione minima: deve essere JSON
       try { JSON.parse(raw); }
       catch {
         console.error('[server] database.json corrotto');
@@ -124,8 +194,6 @@ const server = http.createServer(async (req, res) => {
       let parsed;
       try { parsed = JSON.parse(body); }
       catch { return send(res, 400, JSON.stringify({ error: 'JSON non valido' })); }
-
-      // Sanity check sulla forma
       if (typeof parsed !== 'object' || parsed === null) {
         return send(res, 400, JSON.stringify({ error: 'Struttura non valida' }));
       }
@@ -140,18 +208,28 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, JSON.stringify({ ok: true, saved: payload.length }));
     }
 
-    return send(res, 404, JSON.stringify({ error: 'Not found' }));
+    // Endpoint API sconosciuto → 404 JSON (non SPA fallback!)
+    if (req.url && req.url.startsWith('/api/')) {
+      return send(res, 404, JSON.stringify({ error: 'Not found' }));
+    }
+
+    // Tutto il resto → SPA
+    if (req.method === 'GET') return serveStatic(req, res);
+    return send(res, 405, JSON.stringify({ error: 'Method not allowed' }));
   } catch (err) {
     console.error('[server] Errore:', err);
     return send(res, 500, JSON.stringify({ error: err.message || 'Errore interno' }));
   }
 });
 
-// IL BLOCCO CRITICO CHE MANCAVA: Forzare 127.0.0.1
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, HOST, () => {
   console.log('═══════════════════════════════════════════════════════════');
-  console.log(`  📡 Presenze server attivo in LOCALE PURO: http://127.0.0.1:${PORT}`);
+  console.log(`  📡 Presenze server attivo: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
+  if (HOST === '0.0.0.0') {
+    console.log(`     (raggiungibile da altri dispositivi sulla rete locale)`);
+  }
   console.log(`  💾 Database file: ${DB_FILE}`);
   console.log(`  🗂️  Backup dir:   ${BACKUP_DIR}`);
+  console.log(`  🌐 SPA dist:     ${distAvailable ? DIST_DIR : '⚠️  non trovata (esegui: npm run build)'}`);
   console.log('═══════════════════════════════════════════════════════════');
 });

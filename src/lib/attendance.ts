@@ -1,4 +1,5 @@
 // Types and storage utilities for attendance tracking
+import { newId } from "./uid";
 
 export type ShiftType = 'mattina' | 'pomeriggio' | 'notte' | 'spezzato' | 'personalizzato';
 
@@ -139,10 +140,28 @@ export function setSaveErrorHandler(fn: ((err: Error) => void) | null) {
  * In caso di errore lancia: l'app deve mostrare schermata "Server non in esecuzione".
  */
 export async function initData(): Promise<AttendanceData> {
-  const res = await fetch('/api/data', { cache: 'no-store' });
+  let res: Response;
+  try {
+    res = await fetch('/api/data', { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+  } catch (err) {
+    _serverAvailable = false;
+    throw new Error(
+      `Impossibile contattare il server locale (${err instanceof Error ? err.message : 'rete non disponibile'}). ` +
+      `Assicurati di aprire l'app dall'URL del server (http://<ip>:3001/), non dal sito Lovable pubblicato.`
+    );
+  }
   if (!res.ok) {
     _serverAvailable = false;
     throw new Error(`Server ha risposto con status ${res.status}`);
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('json')) {
+    _serverAvailable = false;
+    throw new Error(
+      `La risposta di /api/data non è JSON (content-type: ${ct || 'sconosciuto'}). ` +
+      `Stai probabilmente aprendo il frontend da un origin diverso dal server (es. URL Lovable). ` +
+      `Apri l'app dall'URL del server: http://<ip-pc>:3001/`
+    );
   }
   const remote = (await res.json()) as Partial<AttendanceData>;
   _cache = {
@@ -200,7 +219,7 @@ export function saveData(data: AttendanceData) {
 
 export function addEmployee(profile: Omit<EmployeeProfile, 'id'>): EmployeeProfile {
   const data = loadData();
-  const newProfile: EmployeeProfile = { ...profile, id: crypto.randomUUID() };
+  const newProfile: EmployeeProfile = { ...profile, id: newId() };
   data.employees.push(newProfile);
   saveData(data);
   return newProfile;
@@ -229,7 +248,7 @@ export function getEmployeesProfiles(): EmployeeProfile[] {
 
 export function addEntry(entry: Omit<AttendanceEntry, 'id'>): AttendanceEntry {
   const data = loadData();
-  const newEntry: AttendanceEntry = { ...entry, id: crypto.randomUUID() };
+  const newEntry: AttendanceEntry = { ...entry, id: newId() };
   data.entries.push(newEntry);
   saveData(data);
   return newEntry;
@@ -254,7 +273,7 @@ export function deleteEntry(id: string): void {
 
 export function addLeave(leave: Omit<LeaveEntry, 'id'>): LeaveEntry {
   const data = loadData();
-  const newLeave: LeaveEntry = { ...leave, id: crypto.randomUUID() };
+  const newLeave: LeaveEntry = { ...leave, id: newId() };
   data.leaves.push(newLeave);
   saveData(data);
   return newLeave;
@@ -356,7 +375,7 @@ export function runReconciliation(): number {
       const fallbackTime = profile?.expectedOut2 || profile?.expectedOut1 || '18:00';
 
       const autoEntry: AttendanceEntry = {
-        id: crypto.randomUUID(),
+        id: newId(),
         employeeName: empName,
         timestamp: `${date}T${fallbackTime}:00`,
         type: 'check-out',
@@ -417,7 +436,7 @@ export function runAutoFill(daysBack: number = 14): number {
 
       for (const s of slots) {
         data.entries.push({
-          id: crypto.randomUUID(),
+          id: newId(),
           employeeName: profile.name,
           timestamp: `${dateStr}T${s.time}:00`,
           type: s.type,
@@ -631,7 +650,7 @@ export function calculateTimeBank(
 
 export function addProject(project: Omit<Project, 'id'>): Project {
   const data = loadData();
-  const newProject: Project = { ...project, id: crypto.randomUUID() };
+  const newProject: Project = { ...project, id: newId() };
   data.projects.push(newProject);
   saveData(data);
   return newProject;

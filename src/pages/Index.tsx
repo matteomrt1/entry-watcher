@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ScanLine, ClipboardList, CalendarOff, BarChart3, Database, LayoutDashboard, CalendarDays, Users, Monitor, Wallet, Briefcase, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
-import { runReconciliation, runAutoFill, initData, isServerAvailable, setSaveErrorHandler } from '@/lib/attendance';
+import { runReconciliation, runAutoFill, initData, isServerAvailable, setSaveErrorHandler, setServerStatusHandler } from '@/lib/attendance';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import QRScanner from '@/components/QRScanner';
@@ -65,12 +65,16 @@ const Index = () => {
     setSaveErrorHandler((err) => {
       setServerOk(false);
       toast.error(`Salvataggio su database.json fallito: ${err.message}`, {
-        description: 'Riavvia il server: node server.js',
+        description: 'Lascia aperto npm start e apri l’app da http://localhost:3001/',
         duration: 8000,
       });
     });
+    setServerStatusHandler(setServerOk);
     boot();
-    return () => setSaveErrorHandler(null);
+    return () => {
+      setSaveErrorHandler(null);
+      setServerStatusHandler(null);
+    };
   }, []);
 
   if (loading) {
@@ -93,11 +97,15 @@ const Index = () => {
             <h1 className="text-lg font-bold">Server locale non in esecuzione</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            L'applicazione non riesce a leggere <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">database.json</code> perché il server di persistenza non risponde su <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">http://localhost:3001</code>.
+            L'applicazione non riesce a leggere <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">database.json</code>. Il file viene letto solo dal server locale: se vedi questa schermata il processo non è avviato, la porta è bloccata oppure hai aperto l'app dall'URL sbagliato.
           </p>
           <div className="rounded-md bg-card border p-3 text-xs font-mono space-y-1">
             <p className="text-muted-foreground"># Apri un terminale nella cartella del progetto:</p>
-            <p>node server.js</p>
+            <p>npm start</p>
+            <p className="text-muted-foreground"># poi apri sullo stesso PC:</p>
+            <p>http://localhost:3001/</p>
+            <p className="text-muted-foreground"># da tablet/telefono serve anche il firewall Windows aperto sulla porta 3001:</p>
+            <p>http://IP-DEL-PC:3001/</p>
           </div>
           <p className="text-xs text-muted-foreground">
             Dettaglio errore: <span className="font-mono">{bootError}</span>

@@ -23,6 +23,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -86,6 +87,17 @@ function setCors(res) {
 function send(res, status, body, contentType = 'application/json') {
   res.writeHead(status, { 'Content-Type': contentType, 'Cache-Control': 'no-store' });
   res.end(body);
+}
+
+function getLanUrls(port) {
+  const urls = [];
+  const nets = os.networkInterfaces();
+  for (const entries of Object.values(nets)) {
+    for (const net of entries || []) {
+      if (net.family === 'IPv4' && !net.internal) urls.push(`http://${net.address}:${port}/`);
+    }
+  }
+  return urls;
 }
 
 function readBody(req, maxBytes = 50 * 1024 * 1024) {

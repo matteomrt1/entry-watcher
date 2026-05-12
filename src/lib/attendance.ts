@@ -200,7 +200,7 @@ export function saveData(data: AttendanceData) {
 
 export function addEmployee(profile: Omit<EmployeeProfile, 'id'>): EmployeeProfile {
   const data = loadData();
-  const newProfile: EmployeeProfile = { ...profile, id: crypto.randomUUID() };
+  const newProfile: EmployeeProfile = { ...profile, id: newId() };
   data.employees.push(newProfile);
   saveData(data);
   return newProfile;
@@ -229,7 +229,7 @@ export function getEmployeesProfiles(): EmployeeProfile[] {
 
 export function addEntry(entry: Omit<AttendanceEntry, 'id'>): AttendanceEntry {
   const data = loadData();
-  const newEntry: AttendanceEntry = { ...entry, id: crypto.randomUUID() };
+  const newEntry: AttendanceEntry = { ...entry, id: newId() };
   data.entries.push(newEntry);
   saveData(data);
   return newEntry;
@@ -254,7 +254,7 @@ export function deleteEntry(id: string): void {
 
 export function addLeave(leave: Omit<LeaveEntry, 'id'>): LeaveEntry {
   const data = loadData();
-  const newLeave: LeaveEntry = { ...leave, id: crypto.randomUUID() };
+  const newLeave: LeaveEntry = { ...leave, id: newId() };
   data.leaves.push(newLeave);
   saveData(data);
   return newLeave;
@@ -356,7 +356,7 @@ export function runReconciliation(): number {
       const fallbackTime = profile?.expectedOut2 || profile?.expectedOut1 || '18:00';
 
       const autoEntry: AttendanceEntry = {
-        id: crypto.randomUUID(),
+        id: newId(),
         employeeName: empName,
         timestamp: `${date}T${fallbackTime}:00`,
         type: 'check-out',
@@ -417,7 +417,7 @@ export function runAutoFill(daysBack: number = 14): number {
 
       for (const s of slots) {
         data.entries.push({
-          id: crypto.randomUUID(),
+          id: newId(),
           employeeName: profile.name,
           timestamp: `${dateStr}T${s.time}:00`,
           type: s.type,
@@ -631,7 +631,7 @@ export function calculateTimeBank(
 
 export function addProject(project: Omit<Project, 'id'>): Project {
   const data = loadData();
-  const newProject: Project = { ...project, id: crypto.randomUUID() };
+  const newProject: Project = { ...project, id: newId() };
   data.projects.push(newProject);
   saveData(data);
   return newProject;

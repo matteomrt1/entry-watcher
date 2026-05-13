@@ -199,6 +199,22 @@ export function loadData(): AttendanceData {
   return _cache;
 }
 
+async function responseError(res: Response, fallback: string): Promise<Error> {
+  let detail = '';
+  try {
+    const body = await res.text();
+    if (body) {
+      try {
+        const parsed = JSON.parse(body) as { error?: string; hint?: string };
+        detail = parsed.error ? ` — ${parsed.error}${parsed.hint ? ` (${parsed.hint})` : ''}` : ` — ${body.slice(0, 300)}`;
+      } catch {
+        detail = ` — ${body.slice(0, 300)}`;
+      }
+    }
+  } catch {}
+  return new Error(`${fallback} ${res.status}${detail}`);
+}
+
 /**
  * Aggiorna la cache in memoria e posta IMMEDIATAMENTE su database.json
  * tramite il server locale. Sincrona per non rompere l'interfaccia chiamante,
@@ -217,7 +233,7 @@ export function saveData(data: AttendanceData) {
         cache: 'no-store',
       });
       if (!r.ok) {
-        throw new Error(`Server status ${r.status}`);
+        throw await responseError(r, 'Server status');
       } else {
         setServerAvailable(true);
       }

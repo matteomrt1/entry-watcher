@@ -3,8 +3,8 @@
   "leaves": [],
   "employees": [
     {
-      "id": "test",
-      "name": "TEST WRITE",
+      "id": "proxy",
+      "name": "PROXY WRITE",
       "shift": "spezzato",
       "trackingMode": "manual",
       "expectedIn1": "08:00",

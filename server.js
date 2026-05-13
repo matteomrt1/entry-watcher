@@ -259,7 +259,11 @@ const server = http.createServer(async (req, res) => {
     return send(res, 405, JSON.stringify({ error: 'Method not allowed' }));
   } catch (err) {
     console.error('[server] Errore:', err);
-    return send(res, 500, JSON.stringify({ error: err.message || 'Errore interno' }));
+    const code = err?.code ? `Codice: ${err.code}. ` : '';
+    const hint = err?.code === 'EACCES' || err?.code === 'EPERM' || err?.code === 'EBUSY'
+      ? 'database.json potrebbe essere aperto/bloccato da Excel, editor, antivirus o permessi Windows. Chiudi il file e avvia il terminale come Amministratore.'
+      : undefined;
+    return send(res, 500, JSON.stringify({ error: `${code}${err.message || 'Errore interno'}`, hint }));
   }
 });
 

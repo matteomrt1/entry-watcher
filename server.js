@@ -69,10 +69,39 @@ async function rotateBackups() {
   }
 }
 
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function renameWithRetry(from, to) {
+  let lastErr;
+  for (let i = 0; i < 6; i++) {
+    try {
+      await fsp.rename(from, to);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(err.code)) throw err;
+      await wait(120 * (i + 1));
+    }
+  }
+  throw lastErr;
+}
+
 async function writeAtomic(payload) {
   const tmp = DB_FILE + '.tmp';
   await fsp.writeFile(tmp, payload, 'utf8');
-  await fsp.rename(tmp, DB_FILE);
+  try {
+    await renameWithRetry(tmp, DB_FILE);
+  } catch (err) {
+    if (process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(err.code)) {
+      console.warn(`[server] Rename atomico bloccato da Windows (${err.code}); uso scrittura diretta su database.json`);
+      await fsp.writeFile(DB_FILE, payload, 'utf8');
+      await fsp.unlink(tmp).catch(() => undefined);
+    } else {
+      throw err;
+    }
+  }
   const backupFile = path.join(BACKUP_DIR, `database-${todayStr()}.json`);
   await fsp.writeFile(backupFile, payload, 'utf8');
   rotateBackups();
@@ -230,7 +259,11 @@ const server = http.createServer(async (req, res) => {
     return send(res, 405, JSON.stringify({ error: 'Method not allowed' }));
   } catch (err) {
     console.error('[server] Errore:', err);
-    return send(res, 500, JSON.stringify({ error: err.message || 'Errore interno' }));
+    const code = err?.code ? `Codice: ${err.code}. ` : '';
+    const hint = err?.code === 'EACCES' || err?.code === 'EPERM' || err?.code === 'EBUSY'
+      ? 'database.json potrebbe essere aperto/bloccato da Excel, editor, antivirus o permessi Windows. Chiudi il file e avvia il terminale come Amministratore.'
+      : undefined;
+    return send(res, 500, JSON.stringify({ error: `${code}${err.message || 'Errore interno'}`, hint }));
   }
 });
 

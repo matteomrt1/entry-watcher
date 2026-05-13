@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "id": "x",
+      "employeeName": "Mario Rossi",
+      "timestamp": "2026-05-13T08:00:00.000Z",
+      "type": "check-in"
+    }
+  ],
+  "leaves": [],
+  "employees": [],
+  "projects": []
+}

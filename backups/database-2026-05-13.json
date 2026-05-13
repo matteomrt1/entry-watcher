@@ -1,0 +1,17 @@
+{
+  "entries": [],
+  "leaves": [],
+  "employees": [
+    {
+      "id": "test",
+      "name": "TEST WRITE",
+      "shift": "spezzato",
+      "trackingMode": "manual",
+      "expectedIn1": "08:00",
+      "expectedOut1": "12:00",
+      "expectedIn2": "13:00",
+      "expectedOut2": "17:00"
+    }
+  ],
+  "projects": []
+}

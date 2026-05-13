@@ -36,6 +36,7 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const [bootError, setBootError] = useState<string | null>(null);
   const [serverOk, setServerOk] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const bootDone = useRef(false);
 
   const refresh = () => setRefreshKey(k => k + 1);
@@ -64,12 +65,16 @@ const Index = () => {
     bootDone.current = true;
     setSaveErrorHandler((err) => {
       setServerOk(false);
+        setSaveError(err.message);
       toast.error(`Salvataggio su database.json fallito: ${err.message}`, {
         description: 'Lascia aperto npm start e apri l’app da http://localhost:3001/',
         duration: 8000,
       });
     });
-    setServerStatusHandler(setServerOk);
+    setServerStatusHandler((ok) => {
+      setServerOk(ok);
+      if (ok) setSaveError(null);
+    });
     boot();
     return () => {
       setSaveErrorHandler(null);
@@ -136,10 +141,10 @@ const Index = () => {
             <DataManager onImport={refresh} />
             <div
               className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full ${serverOk ? 'bg-accent/15 text-accent' : 'bg-destructive/15 text-destructive'}`}
-              title={serverOk ? 'Connesso a database.json (porta 3001)' : 'Server NON raggiungibile — le modifiche non vengono salvate'}
+              title={serverOk ? 'Connesso a database.json (porta 3001)' : (saveError ? `Scrittura fallita: ${saveError}` : 'Server NON raggiungibile — le modifiche non vengono salvate')}
             >
               {serverOk ? <Database className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-              <span>{serverOk ? 'database.json OK' : 'Server OFFLINE'}</span>
+              <span>{serverOk ? 'database.json OK' : (saveError ? 'Scrittura KO' : 'Server OFFLINE')}</span>
             </div>
           </div>
         </div>
